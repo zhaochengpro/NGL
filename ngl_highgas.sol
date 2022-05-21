@@ -168,17 +168,6 @@ contract NGL is AccessControl, ReentrancyGuard {
         emit Deposit(_memberId, account, inviterId, amount);
     }
 
-    function deposit(uint256 memberId, uint256 inviterId, uint256 amount, Member memory member) external {
-        require(memberId == member.id, "member id not match");
-        require(_verify(memberId, inviterId, amount, member), "Invalid deposit");
-    }
-
-    function _verify(uint256 memberId, uint256 inviterId, uint256 amount, Member memory member) internal view returns (bool) {
-        Member memory member = _members[1];
-        _deposit(amount, memberId, inviterId);
-        return false;
-    }
-
     function upgrade(uint256 memberId) external {
         require(isInitalize, "Not initalize");
         Member storage member = _members[memberId];
