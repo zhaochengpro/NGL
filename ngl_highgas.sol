@@ -277,13 +277,11 @@ contract NGL is AccessControl, ReentrancyGuard {
         isInitalize = true;
     }
 
-    function addLevel(
-        uint248 _up,
-        uint256 _down,
+    function updateLevel(
+    	uint8 _levelId,
         uint256 _value
     ) public onlyRole(MANAGER_ROLE) {
-        _levelId++;
-        _levels[_levelId] = Level(_levelId, _up, _down, _value);
+        _levels[_levelId].value = _value;
         _amountToLevel[_value] = _levelId;
     }
 
