@@ -5,13 +5,6 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "hardhat/console.sol";
-	// "address _platformA": "0x6D07a8885e8a72A32c4DbDe11A7e6D286d86a267",
-	// "address _platformB": "0xD57346E0bf19e372f966BCb7F520BE2620bB6194",
-	// "address _platformC": "0x9de2c3AA448Badf1fCB4f9CcAcA3Eb59f9C59298"
-    //0x357b4C6CF77B6a7085Aa7C94B5CcF84441971EA7
-    // 10000000000000000
-    //10000000000000000
 
 contract NGL is AccessControl, ReentrancyGuard {
     using SafeMath for uint256;
@@ -253,6 +246,16 @@ contract NGL is AccessControl, ReentrancyGuard {
     function canUpgrade(uint256 memberId) external view returns (bool) {
         Member memory member = _members[memberId];
         return _canUpgrade(member);
+    }
+
+    function addLevel(
+        uint248 _up,
+        uint256 _down,
+        uint256 _value
+    ) public onlyRole(MANAGER_ROLE) {
+        _levelId++;
+        _levels[_levelId] = Level(_levelId, _up, _down, _value);
+        _amountToLevel[_value] = _levelId;
     }
 
     function initalize(
@@ -508,10 +511,11 @@ contract NGL is AccessControl, ReentrancyGuard {
         _rewardToFrontSeventyPercent(memberId, toStaticFront, 70);
 
         // reward to self when the _isStaticToSelf be setted true
-        Member storage member = _members[memberId];
+        Member memory member = _members[memberId];
         member.balance += toStaticSelf;
         member.backBalance += toStaticSelf;
         member.totalIncome += toStaticSelf;
+        _members[memberId] = member;
     }
 
     function _rewardToFrontSeventyPercent(uint256 memberId, uint256 toStaticFront, uint256 frontAmount) internal {
@@ -563,7 +567,6 @@ contract NGL is AccessControl, ReentrancyGuard {
     function _rewardToMarket(uint256 amount, uint256 memberId) internal {
         uint256 amount_ = amount;
         uint256 toMarket = amount.mul(depositToMarket).div(100);
-        console.log("market: ", toMarket);
         uint256 inviterId = _relationship[memberId];
         uint256 toDirectAddress = toMarket.mul(marketToDirect).div(depositToMarket); // 20% directly invite
         uint256 toSecondLevelAddress = toMarket.mul(marketToInter).div(depositToMarket); // 10% second level invite
@@ -573,7 +576,7 @@ contract NGL is AccessControl, ReentrancyGuard {
         // to direcly invitation and second invitation
         while (high <= 2) {
             if (inviterId != 0) {
-                Member storage member = _members[inviterId];
+                Member memory member = _members[inviterId];
                 uint256 rewardIncome = high == 1 ? toDirectAddress : toSecondLevelAddress;
                 if (inviterId == 1) platformCBalance += rewardIncome;
                 else {
@@ -581,7 +584,7 @@ contract NGL is AccessControl, ReentrancyGuard {
                     member.totalIncome += rewardIncome;
                     member.dynamicBalance += rewardIncome;
                 }
-  
+                _members[inviterId] = member;
             } else {
                 trashBalance += toSecondLevelAddress;
             }
@@ -628,7 +631,9 @@ contract NGL is AccessControl, ReentrancyGuard {
             // rewawrd to market v1 => v4
             // [v1, v2, v3, v4]  = [0, 2, 3, 0]
             uint256 accumulative = 0;
+
             for (uint256 i = 0;  i < newMembers.length; i++) {
+                Member memory rewardMember = _members[newMembers[i].id];
                 if (newMembers[i].id == 0) {
                     if (i == 0) accumulative += mToV1;
                     else if (i == 1) accumulative += mToV2;
@@ -636,29 +641,30 @@ contract NGL is AccessControl, ReentrancyGuard {
                     else if (i == 3) accumulative += mToV4;
                 } else {
                     if (i == 0) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV1));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV1));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV1));
+                        rewardMember.balance += (accumulative.add(mToV1));
+                        rewardMember.totalIncome += (accumulative.add(mToV1));
+                        rewardMember.dynamicBalance += (accumulative.add(mToV1));
                     }
                     else if (i == 1) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV2));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV2));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV2));
+                        rewardMember.balance += (accumulative.add(mToV2));
+                        rewardMember.totalIncome += (accumulative.add(mToV2));
+                        rewardMember.dynamicBalance += (accumulative.add(mToV2));
                     }
                     else if (i == 2) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV3));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV3));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV3));
+                        rewardMember.balance += (accumulative.add(mToV3));
+                        rewardMember.totalIncome += (accumulative.add(mToV3));
+                        rewardMember.dynamicBalance += (accumulative.add(mToV3));
                     }
                     else if (i == 3) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV4));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV4));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV4));
+                        rewardMember.balance += (accumulative.add(mToV4));
+                        rewardMember.totalIncome += (accumulative.add(mToV4));
+                        rewardMember.dynamicBalance += (accumulative.add(mToV4));
                     }
                     
-                    console.log(" market level: ", i, newMembers[i].id, mToV1);
                     accumulative = 0;
                 }
+                _members[newMembers[i].id] = rewardMember;
+
             }
 
             if (accumulative != 0 ) trashBalance += accumulative;
@@ -700,7 +706,7 @@ contract NGL is AccessControl, ReentrancyGuard {
     }
 
     function _rewardToStaticFront(uint256 amount, uint256 rewardMemberId, uint256 frontAmount) internal {
-        Member storage rewardMember = _members[rewardMemberId];
+        Member memory rewardMember = _members[rewardMemberId];
         Level memory memberLevel = _levels[rewardMember.level];
         uint256 rewardFund = amount.div(frontAmount);
         if (memberLevel.back >= 70) {
@@ -723,7 +729,7 @@ contract NGL is AccessControl, ReentrancyGuard {
             }
         }
 
-        // rewardMember.frontBalance += rewardFund;
+        _members[rewardMemberId] = rewardMember;
     }
 
     function _canUpgrade(Member memory member) internal view returns (bool) {
