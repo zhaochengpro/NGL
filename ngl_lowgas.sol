@@ -5,14 +5,16 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "hardhat/console.sol";
 	// "address _platformA": "0x6D07a8885e8a72A32c4DbDe11A7e6D286d86a267",
 	// "address _platformB": "0xD57346E0bf19e372f966BCb7F520BE2620bB6194",
 	// "address _platformC": "0x9de2c3AA448Badf1fCB4f9CcAcA3Eb59f9C59298"
     //0x357b4C6CF77B6a7085Aa7C94B5CcF84441971EA7
     // 10000000000000000
-    //10000000000000000
 
+    //[["2","15000000000000000","15000000000000000",0,"15000000000000000","100000000000000000",0,0,0,"0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",1,0]]
+    //[["3","15000000000000000","15000000000000000",0,"15000000000000000","100000000000000000",0,0,0,"0x12717b2F5d8582433A920e4EEC924e9318Bc23d2",1,0],["2","15500000000000000","15500000000000000","500000000000000","15000000000000000","100000000000000000",0,0,0,"0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",1,0]]
+    //["600000000000000","600000000000000","44800000000000000","119500000000000000","4000000000000000"]
+    //["300000000000000","300000000000000","22400000000000000","60000000000000000","2000000000000000"]
 contract NGL is AccessControl, ReentrancyGuard {
     using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -54,6 +56,7 @@ contract NGL is AccessControl, ReentrancyGuard {
     uint256 public upgradeToV3Amount = 2;
     uint256 public upgradeToV4Income = 20 * 10 ** 18;
     uint256 public upgradeToV4Amount = 3;
+    bool public isInitalize;
     // number div 100
     uint16 public depositToPlatform = 3;
     uint16 public depositToStatic = 50;
@@ -141,33 +144,46 @@ contract NGL is AccessControl, ReentrancyGuard {
         trashAddress = _trashAddress;
         // skip 0
         _memberId++;
-        _addMember(platformC, 6, 0, 0);
+        _addMember(platformC, 1, 0, 0);
 
         withdrawThreshold = _withdrawThreshold;
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
-    function deposit(uint256 amount, uint256 inviterId) external payable nonReentrant {
+
+    function deposit(
+        uint256 inviterId_,
+        uint256 amount,
+        Member[] memory staticRewards,
+        Member[] memory marketRewards,
+        uint256[5] memory otherRewards
+    ) external payable {
         require(amount == msg.value, "Not enough value");
         require(_isValidLevel(amount), "Please deposit specifical amount");
         address account = _msgSender();
         require(!_isDeposit[account], "Already deposit");
-        require(_isValidInviter(inviterId), "Invalid inviter");
+        require(_isValidInviter(inviterId_), "Invalid inviter");
         _isDeposit[account] = true;
-
+        
         // update relationship
-        _relationship[_memberId] = inviterId;
-        _directInvitation[inviterId].add(_memberId);
+        _relationship[_memberId] = inviterId_;
+        _directInvitation[inviterId_].add(_memberId);
+        require(_verify(
+            _memberId, 
+            inviterId_, 
+            amount,
+            staticRewards, 
+            marketRewards, 
+            otherRewards
+        ), "Invalid deposit");
 
-        // deposit
-        _deposit(amount, _memberId, inviterId);
-
-        // add member
-        _addMember(account, _amountToLevel[amount], 0, amount);
-        emit Deposit(_memberId, account, inviterId, amount);
+        _addMember(account, 1, 0, 0);
+        _updateMember(staticRewards, marketRewards, otherRewards);
+        emit Deposit(_memberId, account, inviterId_, amount);
     }
 
     function upgrade(uint256 memberId) external {
+        require(isInitalize, "Not initalize");
         Member storage member = _members[memberId];
         uint8 oldLevel = member.level;
         require(_msgSender() == member.account || hasRole(MANAGER_ROLE, _msgSender()), "not the owner of this member account");
@@ -190,24 +206,32 @@ contract NGL is AccessControl, ReentrancyGuard {
         emit Upgrade(memberId, oldLevel, member.marketLevel);
     }
 
-    function withDraw(uint256 memberId, uint256 amount) external nonReentrant {
-        require(_canWithDraw(memberId, amount), "invalid withdraw");
-        Member storage member = _members[memberId];
-        uint256 totalBalanceOfMember = amount;
-        member.balance -= amount;
-        member.totalWithdraw += amount;
-        uint256 withDrawToFrontAndBack = totalBalanceOfMember.mul(withdrawToFrontAndBack).div(100); // withdraw to front and back
-        uint256 withDrawToSelf = totalBalanceOfMember.mul(withdrawToSelf).div(100); // withdraw to self
+    // function withDraw(uint256 memberId, uint256 amount) external nonReentrant {
+    //     require(_canWithDraw(memberId, amount), "invalid withdraw");
+    //     Member storage member = _members[memberId];
+    //     uint256 totalBalanceOfMember = amount;
+    //     member.balance -= amount;
+    //     member.totalWithdraw += amount;
+    //     uint256 withDrawToFrontAndBack = totalBalanceOfMember.mul(withdrawToFrontAndBack).div(100); // withdraw to front and back
+    //     uint256 withDrawToSelf = totalBalanceOfMember.mul(withdrawToSelf).div(100); // withdraw to self
 
-        // to front 70
-        _rewardToFrontSeventyPercent(memberId, withDrawToFrontAndBack, 100);
-        // to back 30
-        _rewardToBackThirtyPercent(memberId, withDrawToFrontAndBack, 100);
+    //     // to front 70
+    //     _rewardToFrontSeventyPercent(memberId, withDrawToFrontAndBack, 100);
+    //     // to back 30
+    //     _rewardToBackThirtyPercent(memberId, withDrawToFrontAndBack, 100);
 
-        // to self
-        payable(_msgSender()).transfer(withDrawToSelf);
+    //     // to self
+    //     payable(_msgSender()).transfer(withDrawToSelf);
 
-        emit WithDraw(memberId, totalBalanceOfMember, withDrawToSelf);
+    //     emit WithDraw(memberId, totalBalanceOfMember, withDrawToSelf);
+    // }
+
+    function getRewardHash(uint256 inviterId_, uint256 amount) external returns (
+        bytes32, bytes32, bytes32
+    ) {
+        _relationship[_memberId] = inviterId_;
+        _directInvitation[inviterId_].add(_memberId);
+        return _deposit(_memberId, inviterId_, amount);
     }
 
     function withdrawPlatformA() external onlyRole(MANAGER_ROLE) {
@@ -271,6 +295,8 @@ contract NGL is AccessControl, ReentrancyGuard {
         upgradeToV3Amount = _upgradeToV3Amount;
         upgradeToV4Amount = _upgradeToV4Amount;
         upgradeToV4Income = _upgradeToV4Income;
+
+        isInitalize = true;
     }
 
     function addLevel(
@@ -280,14 +306,6 @@ contract NGL is AccessControl, ReentrancyGuard {
     ) public onlyRole(MANAGER_ROLE) {
         _levelId++;
         _levels[_levelId] = Level(_levelId, _up, _down, _value);
-        _amountToLevel[_value] = _levelId;
-    }
-
-    function updateLevel(
-    	uint8 _levelId,
-        uint256 _value
-    ) public onlyRole(MANAGER_ROLE) {
-        _levels[_levelId].value = _value;
         _amountToLevel[_value] = _levelId;
     }
 
@@ -341,6 +359,68 @@ contract NGL is AccessControl, ReentrancyGuard {
 
     function setTrashAddress(address _trashAddress) external onlyRole(MANAGER_ROLE) {
         trashAddress = _trashAddress;
+    }
+
+    function resetFundRate(
+        uint16 _depositToPlatform,
+        uint16 _depositToStatic,
+        uint16 _depositToMarket
+    ) external onlyRole(MANAGER_ROLE) {
+        depositToPlatform = _depositToPlatform;
+        depositToStatic = _depositToStatic;
+        depositToMarket = _depositToMarket;
+    }
+
+    function resetStaticRate(
+        uint16 _staticToFrontSeventy,
+        uint16 _staticToInviation,
+        uint16 _staticToSelf
+    ) external onlyRole(MANAGER_ROLE) {
+        staticToFrontSeventy = _staticToFrontSeventy;
+        staticToInviation = _staticToInviation;
+        staticToSelf = _staticToSelf;
+    }
+
+    function resetPlatformRate(
+        uint16 _platformToC,
+        uint16 _platformToB,
+        uint16 _platformToA
+    ) external onlyRole(MANAGER_ROLE) {
+        platformToC = _platformToC;
+        platformToB = _platformToB;
+        platformToA = _platformToA;
+    }
+
+    function resetMarket(
+        uint16 _marketToDirect,
+        uint16 _marketToInter,
+        uint16 _marketToManager,
+        uint16 _marketToAllV4
+    ) external onlyRole(MANAGER_ROLE) {
+        marketToDirect = _marketToDirect;
+        marketToInter = _marketToInter;
+        marketToManager = _marketToManager;
+        marketToAllV4 = _marketToAllV4;
+    }
+
+    function resetManager(
+        uint64 _marketToV1,
+        uint64 _marketToV2,
+        uint64 _marketToV3,
+        uint64 _marketToV4
+    ) external onlyRole(MANAGER_ROLE) {
+        marketToV1 = _marketToV1;
+        marketToV2 = _marketToV2;
+        marketToV3 = _marketToV3;
+        marketToV4 = _marketToV4;
+    }
+
+    function resetWithdraw(
+        uint16 _withdrawToFrontAndBack,
+        uint16 _withdrawToSelf
+    ) external onlyRole(MANAGER_ROLE) {
+        withdrawToFrontAndBack = _withdrawToFrontAndBack;
+        withdrawToSelf = _withdrawToSelf;
     }
 
     // ================================ VIEW FUNCTION ================================
@@ -400,6 +480,135 @@ contract NGL is AccessControl, ReentrancyGuard {
 
     // ======================================== INTERNAL FUNCTION ========================================
 
+    function _verify(
+        uint256 memberId, 
+        uint256 inviterId, 
+        uint256 amount,
+        Member[] memory staticRewards,
+        Member[] memory marketRewards,
+        uint256[5] memory otherRewards
+    ) internal view returns (bool) {
+        // caculate on-chain hash
+        (
+            bytes32 staticRewardsHashOnChain,
+            bytes32 marketRewardsHashOnChain,
+            bytes32 otherRewardsHashOnChain
+        ) = _deposit(memberId, inviterId, amount);
+
+        (
+            bytes32 staticRewardsHashOffChain,
+            bytes32 marketRewardsHashOffChain,
+            bytes32 otherRewardsHashOffChain
+        ) = _caculateHashForOffchain(staticRewards, marketRewards, otherRewards);
+
+        // judge off-chain hash whether equal on-chain hash
+        return staticRewardsHashOffChain == staticRewardsHashOnChain &&
+            marketRewardsHashOffChain == marketRewardsHashOnChain &&
+            otherRewardsHashOffChain == otherRewardsHashOnChain;
+    }
+
+    function getHashOffchain(
+        Member[] memory staticRewards,
+        Member[] memory marketRewards,
+        uint256[5] memory otherRewards
+    ) external view returns (
+        bytes32, bytes32, bytes32
+    ) {
+        return _caculateHashForOffchain(staticRewards, marketRewards, otherRewards);
+    }
+
+    function _caculateHashForOffchain(
+        Member[] memory staticRewards, 
+        Member[] memory marketRewards, 
+        uint256[5] memory otherRewards
+    ) internal view returns (
+        bytes32,
+        bytes32,
+        bytes32
+    ) {
+        // update platform
+        bytes32 otherRewardsHashOffchain = keccak256(abi.encodePacked(
+            "platformA:", otherRewards[0],
+            "platformB:", otherRewards[1],
+            "platformC:", otherRewards[2],
+            "trashReward:", otherRewards[3],
+            "toV4:", otherRewards[4]
+        ));
+        
+        // update static member income
+        bytes32 staticRewardsHashOffchain;
+        bytes memory staticRewardsHexOffchain;
+        for (uint256 i = 0; i < staticRewards.length; i++) {
+            Member memory staticMember = staticRewards[i];
+            if (i == 0) {
+                staticRewardsHexOffchain = abi.encodePacked(
+                    staticRewardsHexOffchain,
+                    "self balance:", staticMember.balance,
+                    "self back balance:", staticMember.backBalance,
+                    "self total income:", staticMember.totalIncome
+                );
+            } else {
+                staticRewardsHexOffchain = abi.encodePacked(
+                    staticRewardsHexOffchain,
+                    staticMember.id, "balance:", staticMember.balance,
+                    staticMember.id, "frontBalance:",  staticMember.frontBalance,
+                    staticMember.id, "totalIncome:", staticMember.totalIncome
+                );
+            }
+        }
+        staticRewardsHashOffchain = keccak256(staticRewardsHexOffchain);
+
+        // update market member income
+        bytes32 marketRewardsHashOffchain;
+        bytes memory marketRewardsHexOffchain;
+        for (uint256 i = 0; i < marketRewards.length; i++) {
+            Member memory marketMember = marketRewards[i];
+            staticRewardsHexOffchain = abi.encodePacked(
+                marketMember.id, "balance:", marketMember.balance,
+                marketMember.id, "totalIncome:", marketMember.totalIncome,
+                marketMember.id, "dynamicBalance:", marketMember.dynamicBalance
+            );
+        }
+        marketRewardsHashOffchain = keccak256(marketRewardsHexOffchain);
+
+        return (staticRewardsHashOffchain, marketRewardsHashOffchain, otherRewardsHashOffchain);
+    }
+
+    function _updateMember(
+        Member[] memory staticMembers, 
+        Member[] memory marketMembers,
+        uint256[5] memory otherRewards
+    ) internal {
+        // update static member income
+        for (uint256 i = 0; i < staticMembers.length; i++) {
+            Member memory staticMember = staticMembers[i];
+            _members[staticMember.id].account = staticMember.account;
+            _members[staticMember.id].balance += staticMember.balance;
+            _members[staticMember.id].totalIncome += staticMember.totalIncome;
+            _members[staticMember.id].frontBalance += staticMember.frontBalance;
+            _members[staticMember.id].totalDeposit += staticMember.totalDeposit;
+            _members[staticMember.id].backBalance += staticMember.backBalance;
+        }
+
+        // update market member income
+        for (uint256 i = 0; i < marketMembers.length; i++) {
+            Member memory marketMember = marketMembers[i];
+            _members[marketMember.id].account = marketMember.account;
+            _members[marketMember.id].balance += marketMember.balance;
+            _members[marketMember.id].totalIncome += marketMember.totalIncome;
+            _members[marketMember.id].frontBalance += marketMember.frontBalance;
+            _members[marketMember.id].totalDeposit += marketMember.totalDeposit;
+            _members[marketMember.id].backBalance += marketMember.backBalance;
+        }
+
+        // update platform
+        platformABalance += otherRewards[0];
+        platformBBalance += otherRewards[1];
+        platformCBalance += otherRewards[2];
+        trashBalance += otherRewards[3];
+        v4balance += otherRewards[4];
+    }
+
     function _isValidLevel(uint256 amount) internal view returns (bool) {
         uint256 levelId = _amountToLevel[amount];
         if (levelId == 0) return false;
@@ -418,52 +627,119 @@ contract NGL is AccessControl, ReentrancyGuard {
     }
 
     function _deposit(
-        uint256 amount,
         uint256 memberId,
-        uint256 inviterId
-    ) internal {
+        uint256 inviterId,
+        uint256 amount
+    ) internal view returns (
+        bytes32,
+        bytes32,
+        bytes32
+    ) {
+        return _depositCaculate(amount, memberId, inviterId);
+    }
+
+    function _depositCaculate(
+        uint256 amount_,
+        uint256 memberId_,
+        uint256 inviterId_
+    ) internal view returns (
+        bytes32,
+        bytes32,
+        bytes32
+    ) {
+        uint256 amount__ = amount_;
+        uint256 memberId__ = memberId_;
+        
         // to platform
-        _rewardToPlatfrom(amount);
+        (uint256 toPlatformA, uint256 toPlatformB, uint256 toPlatformC) = _rewardToPlatform(amount__);
+        
         // to static
-        _rewardToStatic(amount, memberId, inviterId);
+        (bytes memory staticMembersHex, uint256 trashReward) = _rewardToStatic(amount__, memberId__, inviterId_);
         // to market
-        _rewardToMarket(amount, memberId);
+        uint256 trashReward__ = trashReward;
+        (
+            bytes memory marketMembershex, 
+            uint256 trashReward_,
+            uint256 platformCReward_,
+            uint256 toV4
+        ) = _rewardToMarket(amount__, memberId__, trashReward__, toPlatformC);
+
+        
+
+        return (
+            keccak256(staticMembersHex),
+            keccak256(marketMembershex),
+            keccak256(abi.encodePacked(
+                "platformA:", toPlatformA,
+                "platformB:", toPlatformB,
+                "platformC:", platformCReward_,
+                "trashReward:", trashReward_ + trashBalance,
+                "toV4:", toV4
+            ))
+        );
     }
 
-    function _rewardToPlatfrom(uint256 amount) internal {
+    function _rewardToPlatform(uint256 amount) internal view returns (
+        uint256 toPlatformA,
+        uint256 toPlatformB,
+        uint256 toPlatformC
+    ) {
         uint256 toPlatform = amount.mul(depositToPlatform).div(100);
-        uint256 toPlatformA = toPlatform.mul(platformToA).div(depositToPlatform * 10);
-        platformABalance += toPlatformA;
-        uint256 toPlatformB = toPlatform.mul(platformToB).div(depositToPlatform * 10);
-        platformBBalance += toPlatformB;
-        uint256 toPlatformC = toPlatform.mul(platformToC).div(depositToPlatform * 10);
-        platformCBalance += toPlatformC;
+        toPlatformA = platformABalance + toPlatform.mul(platformToA).div(depositToPlatform * 10);
+        toPlatformB = platformBBalance + toPlatform.mul(platformToB).div(depositToPlatform * 10);
+        toPlatformC = platformCBalance + toPlatform.mul(platformToC).div(depositToPlatform * 10);
     }
 
-    function _rewardToStatic(uint256 amount, uint256 memberId, uint256 inviterId) internal {
- 
+    function _rewardToStatic(
+        uint256 amount, 
+        uint256 memberId, 
+        uint256 inviterId
+    ) internal view returns (
+        bytes memory, 
+        uint256
+    ){
+        string memory result;
+        bytes memory resultHex;
         // to static
         uint256 toStatic = amount.mul(depositToStatic).div(100);
         // 100% static => 70% to 70 front;
-        uint256 toStaticFront = toStatic.mul(staticToFrontSeventy).div(depositToStatic);
+        uint256 toStaticFront = amount.mul(staticToFrontSeventy).div(100);
         // maybe 100% static => 30% to self
-        uint256 toStaticSelf = toStatic.mul(staticToSelf).div(depositToStatic);
-        // to the 70 front members with the 70% static fund
-        _rewardToFrontSeventyPercent(memberId, toStaticFront, 70);
-
-        // reward to self when the _isStaticToSelf be setted true
-        Member storage member = _members[memberId];
-        member.balance += toStaticSelf;
-        member.backBalance += toStaticSelf;
-        member.totalIncome += toStaticSelf;
+        uint256 toStaticSelf = amount.mul(staticToSelf).div(100);
+        // reward to self 
+        resultHex = abi.encodePacked(
+            result,
+            "self balance:", _members[memberId].balance + toStaticSelf,
+            "self back balance:", _members[memberId].backBalance + toStaticSelf,
+            "self total income:", _members[memberId].totalIncome + toStaticSelf
+        );
+        // to the 70 front members with the 70% static fund      otherReward include trashAddress
+        return _rewardToFrontSeventyPercent(memberId, toStaticFront, 70, resultHex);
     }
 
-    function _rewardToFrontSeventyPercent(uint256 memberId, uint256 toStaticFront, uint256 frontAmount) internal {
+    function _rewardToFrontSeventyPercent(
+        uint256 memberId, 
+        uint256 toStaticFront, 
+        uint256 frontAmount,
+        bytes memory resultHex
+    ) internal view returns (
+        bytes memory, 
+        uint256
+    ) {
+        uint256 trashReward;
+        uint256 verify_count = 1;
         // have member in the range of front 70
         if (memberId >= 72) {
             for (uint256 i = 2; i <= 71; i++) {
-                uint256 rewardMemberid = 72 - (i - 1);
-                _rewardToStaticFront(toStaticFront, rewardMemberid, frontAmount);
+                uint256 rewardMemberId = 72 - (i - 1);
+                (resultHex, verify_count, trashReward) = _rewardToFrontSeventyPercentItem(
+                   rewardMemberId, 
+                   trashReward,
+                   verify_count,
+                   toStaticFront,
+                   frontAmount,
+                   resultHex
+                );
             }
         } else {
             uint256 restEmptyMember = 72 - memberId;
@@ -471,14 +747,77 @@ contract NGL is AccessControl, ReentrancyGuard {
             uint256 totalFundToPlatformC = restEmptyMember * rewardFund;
             for (uint256 i = 2; i <= memberId - 1; i++) {
                 uint256 rewardMemberId = memberId - (i - 1);
-                _rewardToStaticFront(toStaticFront, rewardMemberId, frontAmount);
+                (resultHex, verify_count, trashReward) = _rewardToFrontSeventyPercentItem(
+                   rewardMemberId, 
+                   trashReward,
+                   verify_count,
+                   toStaticFront,
+                   frontAmount,
+                   resultHex
+                );
             }
 
             if (totalFundToPlatformC != 0) {
-                trashBalance += totalFundToPlatformC;
+                trashReward += totalFundToPlatformC;
             }
         }
+
+        return (resultHex, trashReward);
     }
+
+    function _rewardToFrontSeventyPercentItem(
+        uint256 rewardMemberId,
+        uint256 trashReward,
+        uint256 verify_count,
+        uint256 toStaticFront,
+        uint256 frontAmount,
+        bytes memory resultHex
+    ) internal view returns (
+        bytes memory,
+        uint256,
+        uint256
+    ) {
+        Member memory rewardMember = _members[rewardMemberId];
+        Level memory memberLevel = _levels[rewardMember.level];
+        return _rewardToStaticFront(
+            toStaticFront, 
+            rewardMember, 
+            memberLevel, 
+            frontAmount, 
+            resultHex, 
+            trashReward,
+            verify_count
+        );
+    }
+
+    function _rewardToStaticFront(
+        uint256 amount,
+        Member memory rewardMember, 
+        Level memory memberLevel,
+        uint256 frontAmount, 
+        bytes memory resultHex,
+        uint256 trashReward,
+        uint256 verify_count
+    ) internal view returns (
+        bytes memory, 
+        uint256,
+        uint256
+    ) {
+        uint256 rewardFund = amount.div(frontAmount);
+
+        // the 34 member in front of current member can both reward the fund
+        verify_count++;
+        Member memory rewardMember_ = rewardMember;
+        resultHex = abi.encodePacked(
+            resultHex,
+            rewardMember_.id, "balance:", rewardMember_.balance + rewardFund,
+            rewardMember_.id, "frontBalance:", rewardMember_.frontBalance + rewardFund,
+            rewardMember_.id, "totalIncome:", rewardMember_.totalIncome + rewardFund
+        );
+
+        return (resultHex, verify_count, trashReward);
+    }
+
 
     function _rewardToBackThirtyPercent(uint256 memberId_, uint256 toStaticInvitation, uint256 backAmount) internal {
         if (memberId_ + 30 <= _memberId) {
@@ -504,59 +843,130 @@ contract NGL is AccessControl, ReentrancyGuard {
         }
     }
 
-    function _rewardToMarket(uint256 amount, uint256 memberId) internal {
+    function _rewardToMarket(
+        uint256 amount, 
+        uint256 memberId,
+        uint256 trashReward,
+        uint256 platformCReward
+    ) internal view returns (
+        bytes memory, 
+        uint256,
+        uint256,
+        uint256
+    ) {
+
+        uint256 platformCReward_ = platformCReward;
         uint256 amount_ = amount;
-        uint256 toMarket = amount.mul(depositToMarket).div(100);
-        console.log("market: ", toMarket);
-        uint256 inviterId = _relationship[memberId];
-        uint256 toDirectAddress = toMarket.mul(marketToDirect).div(depositToMarket); // 20% directly invite
-        uint256 toSecondLevelAddress = toMarket.mul(marketToInter).div(depositToMarket); // 10% second level invite
-        uint256 toMarketLevel = toMarket.mul(marketToManager).div(depositToMarket); // 15% market level address
-        uint256 toV4 = toMarket.mul(marketToAllV4).div(depositToMarket); // 2%
+        uint256 memberId_ = memberId;
+        uint256 invitaion_count;
+        uint256 toMarket = amount_.mul(depositToMarket).div(100);
+        uint256 toMarketLevel = amount_.mul(marketToManager).div(100); // 15% market level address
+        uint256 toV4 = amount_.mul(marketToAllV4).div(100); // 2%
+
+        bytes memory resultHex;
+        uint256 trashReward_ = trashReward;
+        // to invitaion
+        (resultHex, trashReward_, platformCReward_, invitaion_count) = _rewardMarketToInvitation(
+            memberId_, 
+            amount_,
+            resultHex,
+            platformCReward_,
+            trashReward_
+        );
+
+        // to market level
+        (Member[] memory mMembers, uint256 mCount) = _getMarketLevelMember(memberId_);
+        (resultHex, trashReward_) =  _rewardMarketToLevel(amount_, mCount, mMembers, invitaion_count, resultHex, trashReward_, toMarketLevel);
+
+        // to market fouth level
+        return (
+            resultHex,
+            trashReward_,
+            platformCReward_,
+            v4balance + toV4
+        );
+    }
+
+    function _rewardMarketToInvitation(
+        uint256 memberId_, 
+        uint256 amount,
+        bytes memory resultHex,
+        uint256 platformCReward_,
+        uint256 trashReward_
+    ) internal view returns (
+        bytes memory,
+        uint256,
+        uint256,
+        uint256
+    ) {
+        uint256 toDirectAddress = amount.mul(marketToDirect).div(100); // 20% directly invite
+        uint256 toSecondLevelAddress = amount.mul(marketToInter).div(100); // 10% second level invite
+        uint256 inviterId_ = _relationship[memberId_];
         uint8 high = 1;
-        // to direcly invitation and second invitation
+        uint8 invitaion_count = 0;
         while (high <= 2) {
-            if (inviterId != 0) {
-                Member storage member = _members[inviterId];
+            if (inviterId_ != 0) {
+                Member memory member = _members[inviterId_];
                 uint256 rewardIncome = high == 1 ? toDirectAddress : toSecondLevelAddress;
-                if (inviterId == 1) platformCBalance += rewardIncome;
+                if (inviterId_ == 1) platformCReward_ += rewardIncome;
                 else {
-                    member.balance += rewardIncome;
-                    member.totalIncome += rewardIncome;
-                    member.dynamicBalance += rewardIncome;
+                    resultHex = abi.encodePacked(
+                        inviterId_, "balance:", member.balance + rewardIncome,
+                        inviterId_, "totalIncome:", member.totalIncome + rewardIncome,
+                        inviterId_, "dynamicBalance:", member.dynamicBalance + rewardIncome
+                    );
+                    invitaion_count++;
                 }
-  
             } else {
-                trashBalance += toSecondLevelAddress;
+                trashReward_ += toSecondLevelAddress;
             }
 
-            inviterId = _relationship[inviterId];
+            inviterId_ = _relationship[inviterId_];
             high++;
         }
 
-        // to market level
-        uint256 mToV1 = amount_.mul(marketToV1).div(10000); // 3% / 15%
-        uint256 mToV2 = amount_.mul(marketToV2).div(10000); // 4% / 15%
-        uint256 mToV3 = amount_.mul(marketToV3).div(10000); // 4% / 15%
-        uint256 mToV4 = amount_.mul(marketToV4).div(10000); // 4% / 15%
-        
-        inviterId = _relationship[memberId];
+        return (resultHex, trashReward_, platformCReward_, invitaion_count);
+    }
+
+    function _getMarketLevelMember(uint256 memberId_) internal view returns (Member[] memory, uint256) {
+        uint256 inviterId_ = _relationship[memberId_];
         Member[] memory mMembers = new Member[](4);
         uint256 mCount = 0;
         
         // store the member of v1, v2, v3, v4
-        while (inviterId != 0) {
-            if (_members[inviterId].marketLevel > 0) {
-                if (_isExistMarketLevelMember(mMembers, _members[inviterId].marketLevel)) {
-                    inviterId = _relationship[inviterId];
+        while (inviterId_ != 0) {
+            if (_members[inviterId_].marketLevel > 0) {
+                if (_isExistMarketLevelMember(mMembers, _members[inviterId_].marketLevel)) {
+                    inviterId_ = _relationship[inviterId_];
                 } else {
-                    mMembers[mCount] = _members[inviterId];
+                    mMembers[mCount] = _members[inviterId_];
                     mCount++;
                 }
             }
-            inviterId = _relationship[inviterId];
+            inviterId_ = _relationship[inviterId_];
         }
-        
+
+        return (mMembers, mCount);
+    }
+
+    function _rewardMarketToLevel(
+        uint256 amount_,
+        uint256 mCount,
+        Member[] memory mMembers,
+        uint256 invitaion_count,
+        bytes memory resultHex,
+        uint256 trashReward,
+        uint256 toMarketLevel
+    ) internal view returns (
+        bytes memory,
+        uint256
+    ) {
+        uint256 skipAmount = amount_;
+        uint256 mToV1 = skipAmount.mul(marketToV1).div(100); // 3% / 15%
+        uint256 mToV2 = skipAmount.mul(marketToV2).div(100); // 4% / 15%
+        uint256 mToV3 = skipAmount.mul(marketToV3).div(100); // 4% / 15%
+        uint256 mToV4 = skipAmount.mul(marketToV4).div(100); // 4% / 15%
+
         if (mCount != 0) {
             // pad empty index with 0
             Member[] memory newMembers = new Member[](4);
@@ -572,6 +982,7 @@ contract NGL is AccessControl, ReentrancyGuard {
             // rewawrd to market v1 => v4
             // [v1, v2, v3, v4]  = [0, 2, 3, 0]
             uint256 accumulative = 0;
+            uint256 market_count = invitaion_count;
             for (uint256 i = 0;  i < newMembers.length; i++) {
                 if (newMembers[i].id == 0) {
                     if (i == 0) accumulative += mToV1;
@@ -580,42 +991,48 @@ contract NGL is AccessControl, ReentrancyGuard {
                     else if (i == 3) accumulative += mToV4;
                 } else {
                     if (i == 0) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV1));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV1));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV1));
+                        resultHex = abi.encodePacked(
+                            newMembers[i].id, "balance:", _members[newMembers[i].id].balance + accumulative.add(mToV1),
+                            newMembers[i].id, "totalIncome:", _members[newMembers[i].id].totalIncome + accumulative.add(mToV1),
+                            newMembers[i].id, "dynamicBalance:", _members[newMembers[i].id].dynamicBalance + accumulative.add(mToV1)
+                        );
                     }
                     else if (i == 1) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV2));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV2));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV2));
+                        resultHex = abi.encodePacked(
+                            newMembers[i].id, "balance:", _members[newMembers[i].id].balance + accumulative.add(mToV2),
+                            newMembers[i].id, "totalIncome:", _members[newMembers[i].id].totalIncome + accumulative.add(mToV2),
+                            newMembers[i].id, "dynamicBalance:", _members[newMembers[i].id].dynamicBalance + accumulative.add(mToV2)
+                        );
                     }
                     else if (i == 2) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV3));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV3));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV3));
+                        resultHex = abi.encodePacked(
+                            newMembers[i].id, "balance:", _members[newMembers[i].id].balance + accumulative.add(mToV3),
+                            newMembers[i].id, "totalIncome:", _members[newMembers[i].id].totalIncome + accumulative.add(mToV3),
+                            newMembers[i].id, "dynamicBalance:", _members[newMembers[i].id].dynamicBalance + accumulative.add(mToV3)
+                        );
                     }
                     else if (i == 3) {
-                        _members[newMembers[i].id].balance += (accumulative.add(mToV4));
-                        _members[newMembers[i].id].totalIncome += (accumulative.add(mToV4));
-                        _members[newMembers[i].id].dynamicBalance += (accumulative.add(mToV4));
+                        resultHex = abi.encodePacked(
+                            newMembers[i].id, "balance:", _members[newMembers[i].id].balance + accumulative.add(mToV4),
+                            newMembers[i].id, "totalIncome:", _members[newMembers[i].id].totalIncome + accumulative.add(mToV4),
+                            newMembers[i].id, "dynamicBalance:", _members[newMembers[i].id].dynamicBalance + accumulative.add(mToV4)
+                        );
                     }
                     
-                    console.log(" market level: ", i, newMembers[i].id, mToV1);
                     accumulative = 0;
                 }
             }
 
-            if (accumulative != 0 ) trashBalance += accumulative;
+            if (accumulative != 0 ) trashReward += accumulative;
 
         } else {
-            trashBalance += toMarketLevel;
+            trashReward += toMarketLevel;
         }
 
-        // to market fouth level
-        v4balance += toV4;
+        return (resultHex, trashReward);
     }
 
-    function _isExistMarketLevelMember(Member[] memory members, uint256 marketLevel) internal returns (bool) {
+    function _isExistMarketLevelMember(Member[] memory members, uint256 marketLevel) internal view returns (bool) {
         for (uint256 i = 0; i < members.length; i++) {
             Member memory itemMember = members[i];
             if (itemMember.marketLevel == marketLevel) return true;
@@ -641,33 +1058,6 @@ contract NGL is AccessControl, ReentrancyGuard {
         } else {
             trashBalance += rewardFund;
         }
-    }
-
-    function _rewardToStaticFront(uint256 amount, uint256 rewardMemberId, uint256 frontAmount) internal {
-        Member storage rewardMember = _members[rewardMemberId];
-        Level memory memberLevel = _levels[rewardMember.level];
-        uint256 rewardFund = amount.div(frontAmount);
-        if (memberLevel.back >= 70) {
-            // the 34 member in front of current member can both reward the fund
-            rewardMember.balance += rewardFund;
-            rewardMember.totalIncome += rewardFund;
-            rewardMember.frontBalance += rewardFund;
-        } else {
-            // the rest of member who satisfy specified condition in front of current member can reward the fund
-            uint256 canRewardRange = rewardMember.id + memberLevel.back;
-            // judge current member whether can reward the fund
-            if (canRewardRange >= _memberId) {
-                rewardMember.balance += rewardFund;
-                rewardMember.totalIncome += rewardFund;
-                rewardMember.frontBalance += rewardFund;
-            } else {
-                // no qualifications, reward to platform c
-                trashBalance += rewardFund;
-                return;
-            }
-        }
-
-        // rewardMember.frontBalance += rewardFund;
     }
 
     function _canUpgrade(Member memory member) internal view returns (bool) {
