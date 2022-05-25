@@ -5,6 +5,12 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+	// "address _platformA": "0x4071907af7f9316882C0EC429DB89814Fe1b13d2",
+	// "address _platformB": "0x964773dE730846e3A60684589fc81fB45931303d",
+	// "address _platformC": "0x7AcCef909A91467D1571264edC83ACacCf70e7a1"
+    //0xb6b7a4d0EC6eC8beFb3f0402bFF3AF26701D8f88
+    // 10000000000000000
+    //10000000000000000
 
 contract NGL is AccessControl, ReentrancyGuard {
     using SafeMath for uint256;
@@ -198,34 +204,47 @@ contract NGL is AccessControl, ReentrancyGuard {
         _rewardToFrontSeventyPercent(memberId, withDrawToFrontAndBack, 100);
         // to back 30
         _rewardToBackThirtyPercent(memberId, withDrawToFrontAndBack, 100);
-
         // to self
         payable(_msgSender()).transfer(withDrawToSelf);
 
         emit WithDraw(memberId, totalBalanceOfMember, withDrawToSelf);
     }
 
-    function withdrawPlatformA() external onlyRole(MANAGER_ROLE) {
+    function withdrawPlatformA() external {
+        require(_msgSender() == platformA, "Not platformA");
+        require(platformABalance > 0);
         payable(platformA).transfer(platformABalance);
+        platformABalance = 0;
     }
     
-    function withdrawPlatformB() external onlyRole(MANAGER_ROLE) {
+    function withdrawPlatformB() external {
+        require(_msgSender() == platformB, "Not platformB");
+        require(platformBBalance > 0);
         payable(platformB).transfer(platformBBalance);
+        platformBBalance = 0;
     }
 
-    function withdrawPlatformC() external onlyRole(MANAGER_ROLE) {
+    function withdrawPlatformC() external {
+        require(_msgSender() == platformC, "Not platformC");
+        require(platformCBalance > 0);
         payable(platformC).transfer(platformCBalance);
+        platformCBalance = 0;
     }
 
-    function withdrawTrash() external onlyRole(MANAGER_ROLE) {
+    function withdrawTrash() external {
+        require(_msgSender() == trashAddress, "Not trashAddress");
+        require(trashBalance > 0);
         payable(trashAddress).transfer(trashBalance);
+        trashBalance = 0;
     }
 
     function emencyWithDraw(address account) external onlyRole(MANAGER_ROLE) {
+        require(address(this).balance > 0);
         payable(account).transfer(address(this).balance);
     }
 
-    function rewardV4() external onlyRole(BOT_ROLE) {
+    function rewardV4() external {
+        require(hasRole(BOT_ROLE, _msgSender()) || hasRole(MANAGER_ROLE, _msgSender()), "Not Manager Role Or Bot Role");
         (bool success, uint256 value) = v4balance.tryDiv(
             _marketLevelFourToMember.length()
         );
@@ -318,6 +337,15 @@ contract NGL is AccessControl, ReentrancyGuard {
     function setMarketLevel(uint256 _memberId, uint8 _marketLevel) external onlyRole(MANAGER_ROLE) {
         Member storage member = _members[_memberId];
         member.marketLevel = _marketLevel;
+        if (_marketLevel == 1) {
+            _marketLevelOneToMember.add(_memberId);
+        } else if (_marketLevel == 2) {
+            _marketLevelTwoToMember.add(_memberId);
+        } else if (_marketLevel == 3) {
+            _marketLevelThreeToMember.add(_memberId);
+        } else if (_marketLevel == 4) {
+            _marketLevelFourToMember.add(_memberId);
+        }
     }
 
     function setThreshold(uint256 _threshold) external onlyRole(MANAGER_ROLE) {
@@ -457,6 +485,10 @@ contract NGL is AccessControl, ReentrancyGuard {
         return _directInvitation[memberId].values();
     }
 
+    function getLevel(uint8 levelId) external view returns (Level memory) {
+        return _levels[levelId];
+    }
+
     // ======================================== INTERNAL FUNCTION ========================================
 
     function _isValidLevel(uint256 amount) internal view returns (bool) {
@@ -594,10 +626,10 @@ contract NGL is AccessControl, ReentrancyGuard {
         }
 
         // to market level
-        uint256 mToV1 = amount_.mul(marketToV1).div(10000); // 3% / 15%
-        uint256 mToV2 = amount_.mul(marketToV2).div(10000); // 4% / 15%
-        uint256 mToV3 = amount_.mul(marketToV3).div(10000); // 4% / 15%
-        uint256 mToV4 = amount_.mul(marketToV4).div(10000); // 4% / 15%
+        uint256 mToV1 = amount_.mul(marketToV1).div(100); // 3% / 15%
+        uint256 mToV2 = amount_.mul(marketToV2).div(100); // 4% / 15%
+        uint256 mToV3 = amount_.mul(marketToV3).div(100); // 4% / 15%
+        uint256 mToV4 = amount_.mul(marketToV4).div(100); // 4% / 15%
         
         inviterId = _relationship[memberId];
         Member[] memory mMembers = new Member[](4);
