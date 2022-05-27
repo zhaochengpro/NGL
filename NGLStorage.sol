@@ -133,14 +133,13 @@ contract NGLStorage is AccessControl {
         _memberId = memberId;
     }
 
-    function getMemberId() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256) {
+    function getMemberId() public view returns (uint256) {
         return _memberId;
     }
 
-    function setWithdrawThreshold(uint256 withdrawThreshold_) public onlyRole(LOGIC_CONTRACT_ROLE) {
+    function setWithdrawThreshold(uint256 withdrawThreshold_) public onlyRole(MANAGER_ROLE) {
         withdrawThreshold = withdrawThreshold_;
     }
-
 
     function addMemberId() public onlyRole(LOGIC_CONTRACT_ROLE) {
         _memberId += 1;
@@ -154,7 +153,7 @@ contract NGLStorage is AccessControl {
         v4balance = amount;
     }
 
-    function setPlatformA(address account) public onlyRole(LOGIC_CONTRACT_ROLE) {
+    function setPlatformA(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         platformA = account;
     }
     
@@ -162,7 +161,7 @@ contract NGLStorage is AccessControl {
         platformABalance = amount;
     }
     
-    function setPlatformB(address account) public onlyRole(LOGIC_CONTRACT_ROLE) {
+    function setPlatformB(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         platformB = account;
     }
 
@@ -178,7 +177,7 @@ contract NGLStorage is AccessControl {
         platformCBalance = amount;
     }
 
-    function setTrashAddress(address account) public onlyRole(LOGIC_CONTRACT_ROLE) {
+    function setTrashAddress(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         trashAddress = account;
     }
 
@@ -202,7 +201,7 @@ contract NGLStorage is AccessControl {
         _members[memberId] = member;
     }
 
-    function getMembers(uint256 memberId) public onlyRole(LOGIC_CONTRACT_ROLE) view returns (NGLStruct.Member memory) {
+    function getMembers(uint256 memberId) public view returns (NGLStruct.Member memory) {
         return _members[memberId];
     }
 
@@ -210,7 +209,7 @@ contract NGLStorage is AccessControl {
         _levels[levelId] = level;
     }
     
-    function getLevel(uint8 levelId) public onlyRole(LOGIC_CONTRACT_ROLE) view returns (NGLStruct.Level memory) {
+    function getLevel(uint8 levelId) public view returns (NGLStruct.Level memory) {
         return _levels[levelId];
     }
 
@@ -222,7 +221,7 @@ contract NGLStorage is AccessControl {
         _levelId += 1;
     }
     
-    function getLevelId() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint8) {
+    function getLevelId() public view returns (uint8) {
         return _levelId;
     }
 
@@ -230,7 +229,7 @@ contract NGLStorage is AccessControl {
         _amountToLevel[amount] = levelId;
     }
 
-    function getAmountToLevel(uint256 amount) public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint8) {
+    function getAmountToLevel(uint256 amount) public  view returns (uint8) {
         return _amountToLevel[amount];
     }
 
@@ -238,7 +237,7 @@ contract NGLStorage is AccessControl {
         _relationship[memberId] = inviterId;
     }
 
-    function getRelationship(uint256 memberId) public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256) {
+    function getRelationship(uint256 memberId) public  view returns (uint256) {
         return _relationship[memberId];
     }
 
@@ -246,7 +245,7 @@ contract NGLStorage is AccessControl {
         _directInvitation[inviterId].add(memberId);
     }
     
-    function getDirectInvitation(uint256 inviterId) public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256[] memory) {
+    function getDirectInvitation(uint256 inviterId) public view returns (uint256[] memory) {
         return _directInvitation[inviterId].values();
     }
 
@@ -254,7 +253,7 @@ contract NGLStorage is AccessControl {
         _marketLevelOneToMember.add(memberId);
     }
 
-    function getMarketLevelOneToMember() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256[] memory) {
+    function getMarketLevelOneToMember() public view returns (uint256[] memory) {
         return _marketLevelOneToMember.values();
     }
 
@@ -262,7 +261,7 @@ contract NGLStorage is AccessControl {
         _marketLevelTwoToMember.add(memberId);
     }
 
-    function getMarketLevelTwoToMember() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256[] memory) {
+    function getMarketLevelTwoToMember() public view returns (uint256[] memory) {
         return _marketLevelTwoToMember.values();
     }
 
@@ -270,7 +269,7 @@ contract NGLStorage is AccessControl {
         _marketLevelThreeToMember.add(memberId);
     }
 
-    function getMarketLevelThreeToMember() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256[] memory) {
+    function getMarketLevelThreeToMember() public view returns (uint256[] memory) {
         return _marketLevelThreeToMember.values();
     }
 
@@ -278,7 +277,7 @@ contract NGLStorage is AccessControl {
         _marketLevelFourToMember.add(memberId);
     }
 
-    function getMarketLevelFourToMember() public onlyRole(LOGIC_CONTRACT_ROLE) view returns (uint256[] memory) {
+    function getMarketLevelFourToMember() public view returns (uint256[] memory) {
         return _marketLevelFourToMember.values();
     }
 
@@ -291,7 +290,7 @@ contract NGLStorage is AccessControl {
         uint256 _upgradeToV3Amount,
         uint256 _upgradeToV4Income,
         uint256 _upgradeToV4Amount
-    ) external onlyRole(LOGIC_CONTRACT_ROLE) {
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         upgradeToV1Income = _upgradeToV1Income;
         upgradeToV1Amount = _upgradeToV1Amount;
         upgradeToV2Amount = _upgradeToV2Amount;
@@ -326,7 +325,7 @@ contract NGLStorage is AccessControl {
                 uint8 _level,
                 uint8 _marketLevel,
                 uint256 _lastDepositTime
-            ) = INGL(oldContract_).memberOf(1);
+            ) = INGL(oldContract_).memberOf(i);
             NGLStruct.Member memory member = NGLStruct.Member(
                 _id,
                 _balance,
