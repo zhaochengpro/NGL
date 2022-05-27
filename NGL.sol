@@ -35,7 +35,7 @@ contract NGL is AccessControl {
     // ======================================== EXTERNAL FUNCTION ========================================
     function initalize() external onlyRole(DEFAULT_ADMIN_ROLE) {
         // initialize level
-        addLevel(30, 70, 1 * 10 ** 18);
+        addLevel(30, 70, 1 * 10 ** 17);
     }
 
     function deposit(uint256 amount, uint256 inviterId) external payable {
@@ -208,26 +208,6 @@ contract NGL is AccessControl {
 
         nglStorage.setMembers(_memberId, member);
     }
-    
-    function setThreshold(uint256 _threshold) external onlyRole(MANAGER_ROLE) {
-        nglStorage.setWithdrawThreshold(_threshold);
-    }
-
-    function setPlatformA(address _platformA) external onlyRole(MANAGER_ROLE) {
-        nglStorage.setPlatformA(_platformA);
-    }
-
-    function setPlatformB(address _platformB) external onlyRole(MANAGER_ROLE) {
-        nglStorage.setPlatformB(_platformB);
-    }
-
-    function setPlatformC(address _platformC) external onlyRole(MANAGER_ROLE) {
-        nglStorage.setPlatformC(_platformC);
-    }
-
-    function setTrashAddress(address _trashAddress) external onlyRole(MANAGER_ROLE) {
-        nglStorage.setTrashAddress(_trashAddress);
-    }
 
     // ================================ VIEW FUNCTION ================================
 
@@ -262,27 +242,6 @@ contract NGL is AccessControl {
         _totalWithdraw = member.totalWithdraw;
         _dynamicBalance = member.dynamicBalance;
         _lastDepositTime = member.lastDepositTime;
-    }
-
-    function marketLevelOneToMember() external view returns (uint256[] memory) {
-        return nglStorage.getMarketLevelOneToMember();
-    }
-    
-    function marketLevelTwoToMember() external view returns (uint256[] memory) {
-        return nglStorage.getMarketLevelTwoToMember();
-    }
-
-    function marketLevelThreeToMember() external view returns (uint256[] memory) {
-        return nglStorage.getMarketLevelThreeToMember();
-    }
-
-    function marketLevelFourToMember() external view returns (uint256[] memory) {
-        return nglStorage.getMarketLevelFourToMember();
-    }
-
-    function directInvitation(uint256 memberId) external view returns (uint256[] memory) {
-        return nglStorage.getDirectInvitation(memberId);
-        
     }
 
     // ======================================== INTERNAL FUNCTION ========================================
