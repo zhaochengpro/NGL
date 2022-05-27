@@ -23,30 +23,21 @@ contract NGL is AccessControl {
     INGLStorage public nglStorage;
 
     constructor(
-        address _storageContract,
-        address _platformA,
-        address _platformB,
-        address _platformC,
-        address _trashAddress
+        address _storageContract
     ) {
         // initialize roles
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _grantRole(MANAGER_ROLE, _msgSender());
         
         nglStorage = INGLStorage(_storageContract);
-        nglStorage.setPlatformA(_platformA);
-        nglStorage.setPlatformB(_platformB);
-        nglStorage.setPlatformC(_platformC);
-        nglStorage.setTrashAddress(_trashAddress);
-
-        // initialize level
-        addLevel(30, 70, 1 * 10 ** 18);
-        // skip 0
-        nglStorage.addMemberId();
-        _addMember(_platformC, 6, 0, 0);
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
+    function initalize() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        // initialize level
+        addLevel(30, 70, 1 * 10 ** 18);
+    }
+
     function deposit(uint256 amount, uint256 inviterId) external payable {
         require(amount == msg.value, "Not enough value");
         require(_isValidLevel(amount), "Please deposit specifical amount");
@@ -192,28 +183,6 @@ contract NGL is AccessControl {
         nglStorage.setAmountToLevel(_value, levelId);
     }
 
-    function initalize(
-        uint256 _upgradeToV1Amount,
-        uint256 _upgradeToV1Income,
-        uint256 _upgradeToV2Amount,
-        uint256 _upgradeToV2Income,
-        uint256 _upgradeToV3Income,
-        uint256 _upgradeToV3Amount,
-        uint256 _upgradeToV4Income,
-        uint256 _upgradeToV4Amount
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        nglStorage.setUpgradeMarketLevel(
-             _upgradeToV1Amount,
-            _upgradeToV1Income,
-            _upgradeToV2Amount,
-            _upgradeToV2Income,
-            _upgradeToV3Income,
-            _upgradeToV3Amount,
-            _upgradeToV4Income,
-            _upgradeToV4Amount
-        );
-    }
-
     function updateLevel(
     	uint8 _levelId,
         uint256 _value
@@ -239,7 +208,7 @@ contract NGL is AccessControl {
 
         nglStorage.setMembers(_memberId, member);
     }
-
+    
     function setThreshold(uint256 _threshold) external onlyRole(MANAGER_ROLE) {
         nglStorage.setWithdrawThreshold(_threshold);
     }
@@ -293,7 +262,7 @@ contract NGL is AccessControl {
         _totalWithdraw = member.totalWithdraw;
         _dynamicBalance = member.dynamicBalance;
         _lastDepositTime = member.lastDepositTime;
-    } 
+    }
 
     function marketLevelOneToMember() external view returns (uint256[] memory) {
         return nglStorage.getMarketLevelOneToMember();
