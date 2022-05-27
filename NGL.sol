@@ -2,20 +2,12 @@
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-	// "address _platformA": "0x4071907af7f9316882C0EC429DB89814Fe1b13d2",
-	// "address _platformB": "0x964773dE730846e3A60684589fc81fB45931303d",
-	// "address _platformC": "0x7AcCef909A91467D1571264edC83ACacCf70e7a1"
-    //0xb6b7a4d0EC6eC8beFb3f0402bFF3AF26701D8f88
-    // 10000000000000000
-    //10000000000000000
+import "./INGLStorage.sol";
 
-contract NGL is AccessControl, ReentrancyGuard {
+//0xF621c2B51e528B1065571b351A8C1c2ebEb32160
+contract NGL is AccessControl {
     using SafeMath for uint256;
-    using EnumerableSet for EnumerableSet.AddressSet;
-    using EnumerableSet for EnumerableSet.UintSet;
 
     // ======================================== EVENT ========================================
     event Deposit(uint256 indexed memberId, address indexed account, uint256 indexed inviterId, uint256 amount);
@@ -28,177 +20,89 @@ contract NGL is AccessControl, ReentrancyGuard {
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant BOT_ROLE = keccak256("BOT_ROLE");
 
-    // ======================================== PUBLIC VARIBLE ========================================
-    uint256 public _memberId;
-    mapping(address => uint256) public memberIdOf;
-    uint256 public v4balance;
-    address public platformA;
-    uint256 public platformABalance;
-    address public platformB;
-    uint256 public platformBBalance;
-    address public platformC;
-    uint256 public platformCBalance;
-    address public trashAddress;
-    uint256 public trashBalance;
-    uint256 public withdrawThreshold;
-
-    // the lowest balane of want to upgrade
-    uint256 public upgradeToV1Income = 5 * 10 ** 18;
-    uint256 public upgradeToV1Amount = 10;
-    // the lowest number of invitation of want to upgrade
-    uint256 public upgradeToV2Amount = 2;
-    // the lowest balane of want to upgrade
-    uint256 public upgradeToV2Income = 8 * 10 ** 18;
-    uint256 public upgradeToV3Income = 12 * 10 ** 18;
-    uint256 public upgradeToV3Amount = 2;
-    uint256 public upgradeToV4Income = 20 * 10 ** 18;
-    uint256 public upgradeToV4Amount = 3;
-    bool public isInitalize;
-    // number div 100
-    uint16 public depositToPlatform = 3;
-    uint16 public depositToStatic = 50;
-    uint16 public depositToMarket = 47;
-
-    // number div 3 * 10
-    uint16 public platformToC = 24;
-    uint16 public platformToB = 3;
-    uint16 public platformToA = 3;
-
-    // number div 50
-    uint16 public staticToFrontSeventy = 35;
-    uint16 public staticToInviation = 15;
-    uint16 public staticToSelf = 15;
-
-    // number div 47
-    uint16 public marketToDirect = 20;
-    uint16 public marketToInter = 10;
-    uint16 public marketToManager = 15;
-    uint16 public marketToAllV4 = 2;
-    uint64 public marketToV1 = 3;
-    uint64 public marketToV2 = 4;
-    uint64 public marketToV3 = 4;
-    uint64 public marketToV4 = 4;
-
-    // withdraw rate
-    uint16 public withdrawToFrontAndBack = 30;
-    uint16 public withdrawToSelf = 70;
-
-    // ======================================== PRIVATE VARIBLE ========================================
-    mapping(address => bool) private _isDeposit;
-    mapping(uint256 => Member) private _members;
-    mapping(uint8 => Level) private _levels;
-    uint8 private _levelId;
-    mapping(uint256 => uint8) private _amountToLevel;
-
-    mapping(uint256 => uint256) private _relationship;
-    mapping(uint256 => EnumerableSet.UintSet) private _directInvitation;
-    EnumerableSet.UintSet private _marketLevelOneToMember;
-    EnumerableSet.UintSet private _marketLevelTwoToMember;
-    EnumerableSet.UintSet private _marketLevelThreeToMember;
-    EnumerableSet.UintSet private _marketLevelFourToMember;
-
-    struct Member {
-        uint256 id;
-        uint256 balance;
-        uint256 totalIncome;
-        uint256 frontBalance;
-        uint256 backBalance;
-        uint256 totalDeposit;
-        uint256 totalWithdraw;
-        uint256 dynamicBalance;
-        uint256 lastDepositTime;
-        address account;
-        uint8 level;
-        uint8 marketLevel;
-    }
-
-    struct Level {
-        uint8 id;
-        uint248 front;
-        uint256 back;
-        uint256 value;
-    }
+    INGLStorage public nglStorage;
 
     constructor(
+        address _storageContract,
         address _platformA,
         address _platformB,
         address _platformC,
-        address _trashAddress,
-        uint256 _withdrawThreshold
+        address _trashAddress
     ) {
         // initialize roles
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _grantRole(MANAGER_ROLE, _msgSender());
+        
+        nglStorage = INGLStorage(_storageContract);
+        nglStorage.setPlatformA(_platformA);
+        nglStorage.setPlatformB(_platformB);
+        nglStorage.setPlatformC(_platformC);
+        nglStorage.setTrashAddress(_trashAddress);
 
         // initialize level
-        addLevel(30, 70, 1 * 10 ** 17);
-
-        _amountToLevel[1 * 10 ** 17] = _levelId;
-
-        platformA = _platformA;
-        platformB = _platformB;
-        platformC = _platformC;
-        trashAddress = _trashAddress;
+        addLevel(30, 70, 1 * 10 ** 18);
         // skip 0
-        _memberId++;
-        _addMember(platformC, 6, 0, 0);
-
-        withdrawThreshold = _withdrawThreshold;
+        nglStorage.addMemberId();
+        _addMember(_platformC, 6, 0, 0);
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
-    function deposit(uint256 amount, uint256 inviterId) external payable nonReentrant {
+    function deposit(uint256 amount, uint256 inviterId) external payable {
         require(amount == msg.value, "Not enough value");
         require(_isValidLevel(amount), "Please deposit specifical amount");
         address account = _msgSender();
-        require(!_isDeposit[account], "Already deposit");
+        require(!nglStorage.getIsDeposit(account), "Already deposit");
         require(_isValidInviter(inviterId), "Invalid inviter");
-        _isDeposit[account] = true;
+        nglStorage.setIsDeposit(account, true);
 
         // update relationship
-        _relationship[_memberId] = inviterId;
-        _directInvitation[inviterId].add(_memberId);
+        uint256 _memberId = nglStorage.getMemberId();
+        nglStorage.setRelationship(_memberId, inviterId);
+        nglStorage.setDirectInvitation(inviterId, _memberId);
 
         // deposit
         _deposit(amount, _memberId, inviterId);
 
         // add member
-        _addMember(account, _amountToLevel[amount], 0, amount);
+        _addMember(account, nglStorage.getAmountToLevel(amount), 0, amount);
         emit Deposit(_memberId, account, inviterId, amount);
     }
 
     function upgrade(uint256 memberId) external {
-        require(isInitalize, "Not initalize");
-        Member storage member = _members[memberId];
+        require(nglStorage.isInitalize(), "Not initalize");
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         uint8 oldLevel = member.level;
         require(_msgSender() == member.account || hasRole(MANAGER_ROLE, _msgSender()), "not the owner of this member account");
         require(_canUpgrade(member), "not qualification to upgrade");
 
         if (member.marketLevel == 0) {
             member.marketLevel = 1;
-            _marketLevelOneToMember.add(member.id);
+            nglStorage.setMarketLevelOneToMember(member.id);
         } else if (member.marketLevel == 1) {
             member.marketLevel = 2;
-            _marketLevelTwoToMember.add(member.id);
+            nglStorage.setMarketLevelTwoToMember(member.id);
         } else if (member.marketLevel == 2) {
             member.marketLevel = 3;
-            _marketLevelThreeToMember.add(member.id);
+            nglStorage.setMarketLevelThreeToMember(member.id);
         } else if (member.marketLevel == 3) {
             member.marketLevel = 4;
-            _marketLevelFourToMember.add(member.id);
+            nglStorage.setMarketLevelFourToMember(member.id);
         }
+
+        nglStorage.setMembers(memberId, member);
 
         emit Upgrade(memberId, oldLevel, member.marketLevel);
     }
 
-    function withDraw(uint256 memberId, uint256 amount) external nonReentrant {
+    function withDraw(uint256 memberId, uint256 amount) external {
         require(_canWithDraw(memberId, amount), "invalid withdraw");
-        Member storage member = _members[memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         uint256 totalBalanceOfMember = amount;
         member.balance -= amount;
         member.totalWithdraw += amount;
-        uint256 withDrawToFrontAndBack = totalBalanceOfMember.mul(withdrawToFrontAndBack).div(100); // withdraw to front and back
-        uint256 withDrawToSelf = totalBalanceOfMember.mul(withdrawToSelf).div(100); // withdraw to self
+        nglStorage.setMembers(memberId, member);
+        uint256 withDrawToFrontAndBack = totalBalanceOfMember.mul(nglStorage.withdrawToFrontAndBack()).div(100); // withdraw to front and back
+        uint256 withDrawToSelf = totalBalanceOfMember.mul(nglStorage.withdrawToSelf()).div(100); // withdraw to self
 
         // to front 70
         _rewardToFrontSeventyPercent(memberId, withDrawToFrontAndBack, 100);
@@ -211,31 +115,39 @@ contract NGL is AccessControl, ReentrancyGuard {
     }
 
     function withdrawPlatformA() external {
+        address platformA = nglStorage.platformA();
+        uint256 platformABalance = nglStorage.platformABalance();
         require(_msgSender() == platformA, "Not platformA");
         require(platformABalance > 0);
         payable(platformA).transfer(platformABalance);
-        platformABalance = 0;
+        nglStorage.setPlatformABalance(0);
     }
     
     function withdrawPlatformB() external {
+        address platformB = nglStorage.platformB();
+        uint256 platformBBalance = nglStorage.platformBBalance();
         require(_msgSender() == platformB, "Not platformB");
         require(platformBBalance > 0);
         payable(platformB).transfer(platformBBalance);
-        platformBBalance = 0;
+        nglStorage.setPlatformBBalance(0);
     }
 
     function withdrawPlatformC() external {
+        address platformC = nglStorage.platformC();
+        uint256 platformCBalance = nglStorage.platformCBalance();
         require(_msgSender() == platformC, "Not platformC");
         require(platformCBalance > 0);
         payable(platformC).transfer(platformCBalance);
-        platformCBalance = 0;
+        nglStorage.setPlatformCBalance(0);
     }
 
     function withdrawTrash() external {
+        address trashAddress = nglStorage.trashAddress();
+        uint256 trashBalance = nglStorage.trashBalance();
         require(_msgSender() == trashAddress, "Not trashAddress");
         require(trashBalance > 0);
         payable(trashAddress).transfer(trashBalance);
-        trashBalance = 0;
+        nglStorage.setTrashBalance(0);
     }
 
     function emencyWithDraw(address account) external onlyRole(MANAGER_ROLE) {
@@ -245,25 +157,27 @@ contract NGL is AccessControl, ReentrancyGuard {
 
     function rewardV4() external {
         require(hasRole(BOT_ROLE, _msgSender()) || hasRole(MANAGER_ROLE, _msgSender()), "Not Manager Role Or Bot Role");
-        (bool success, uint256 value) = v4balance.tryDiv(
-            _marketLevelFourToMember.length()
+        uint256[] memory levelFour = nglStorage.getMarketLevelFourToMember();
+        require(levelFour.length > 0, "Not have four");
+        uint256 value = nglStorage.v4balance().div(
+            levelFour.length
         );
-        require(success, "reward failed");
 
-        for (uint256 i = 0; i < _marketLevelFourToMember.length(); i++) {
-            uint256 mLevelFourMemberId = _marketLevelFourToMember.at(i);
-            Member storage member = _members[mLevelFourMemberId];
+        for (uint256 i = 0; i < levelFour.length; i++) {
+            uint256 mLevelFourMemberId = levelFour[i];
+            NGLStruct.Member memory member = nglStorage.getMembers(mLevelFourMemberId);
             member.balance += value;
             member.dynamicBalance += value;
+            nglStorage.setMembers(mLevelFourMemberId, member);
         }
 
-        v4balance = 0;
+        nglStorage.setV4balance(0);
 
         emit RewardV4(value, block.timestamp);
     }
 
     function canUpgrade(uint256 memberId) external view returns (bool) {
-        Member memory member = _members[memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         return _canUpgrade(member);
     }
 
@@ -272,9 +186,10 @@ contract NGL is AccessControl, ReentrancyGuard {
         uint256 _down,
         uint256 _value
     ) public onlyRole(MANAGER_ROLE) {
-        _levelId++;
-        _levels[_levelId] = Level(_levelId, _up, _down, _value);
-        _amountToLevel[_value] = _levelId;
+        nglStorage.addLevelId();
+        uint8 levelId = nglStorage.getLevelId();
+        nglStorage.setLevel(levelId, NGLStruct.Level(levelId, _up, _down, _value));
+        nglStorage.setAmountToLevel(_value, levelId);
     }
 
     function initalize(
@@ -287,153 +202,68 @@ contract NGL is AccessControl, ReentrancyGuard {
         uint256 _upgradeToV4Income,
         uint256 _upgradeToV4Amount
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        upgradeToV1Income = _upgradeToV1Income;
-        upgradeToV1Amount = _upgradeToV1Amount;
-        upgradeToV2Amount = _upgradeToV2Amount;
-        upgradeToV2Income = _upgradeToV2Income;
-        upgradeToV3Income = _upgradeToV3Income;
-        upgradeToV3Amount = _upgradeToV3Amount;
-        upgradeToV4Amount = _upgradeToV4Amount;
-        upgradeToV4Income = _upgradeToV4Income;
-
-        isInitalize = true;
+        nglStorage.setUpgradeMarketLevel(
+             _upgradeToV1Amount,
+            _upgradeToV1Income,
+            _upgradeToV2Amount,
+            _upgradeToV2Income,
+            _upgradeToV3Income,
+            _upgradeToV3Amount,
+            _upgradeToV4Income,
+            _upgradeToV4Amount
+        );
     }
 
     function updateLevel(
     	uint8 _levelId,
         uint256 _value
     ) public onlyRole(MANAGER_ROLE) {
-        _levels[_levelId].value = _value;
-        _amountToLevel[_value] = _levelId;
-    }
-
-    function setUpgradeToV1Income(uint256 amount)
-        external
-        onlyRole(MANAGER_ROLE)
-    {
-        upgradeToV1Income = amount;
-    }
-
-    function setUpgradeToV2Amount(uint256 amount)
-        external
-        onlyRole(MANAGER_ROLE)
-    {
-        upgradeToV2Amount = amount;
-    }
-
-    function setUpgradeIncome(uint8 marketLevel, uint256 needIncome)
-        external
-        onlyRole(MANAGER_ROLE)
-    {
-        if (marketLevel == 2) {
-            upgradeToV2Income = needIncome;
-        } else if (marketLevel == 3) {
-            upgradeToV3Income = needIncome;
-        } else if (marketLevel == 4) {
-            upgradeToV4Income = needIncome;
-        }
+        NGLStruct.Level memory level = nglStorage.getLevel(_levelId);
+        level.value = _value;
+        nglStorage.setLevel(_levelId, level);
+        nglStorage.setAmountToLevel(_value, _levelId);
     }
 
     function setMarketLevel(uint256 _memberId, uint8 _marketLevel) external onlyRole(MANAGER_ROLE) {
-        Member storage member = _members[_memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(_memberId);
         member.marketLevel = _marketLevel;
         if (_marketLevel == 1) {
-            _marketLevelOneToMember.add(_memberId);
+            nglStorage.setMarketLevelOneToMember(_memberId);
         } else if (_marketLevel == 2) {
-            _marketLevelTwoToMember.add(_memberId);
+            nglStorage.setMarketLevelTwoToMember(_memberId);
         } else if (_marketLevel == 3) {
-            _marketLevelThreeToMember.add(_memberId);
+            nglStorage.setMarketLevelThreeToMember(_memberId);
         } else if (_marketLevel == 4) {
-            _marketLevelFourToMember.add(_memberId);
+            nglStorage.setMarketLevelFourToMember(_memberId);
         }
+
+        nglStorage.setMembers(_memberId, member);
     }
 
     function setThreshold(uint256 _threshold) external onlyRole(MANAGER_ROLE) {
-        withdrawThreshold = _threshold;
+        nglStorage.setWithdrawThreshold(_threshold);
     }
 
     function setPlatformA(address _platformA) external onlyRole(MANAGER_ROLE) {
-        platformA = _platformA;
+        nglStorage.setPlatformA(_platformA);
     }
 
     function setPlatformB(address _platformB) external onlyRole(MANAGER_ROLE) {
-        platformB = _platformB;
+        nglStorage.setPlatformB(_platformB);
     }
 
     function setPlatformC(address _platformC) external onlyRole(MANAGER_ROLE) {
-        platformC = _platformC;
+        nglStorage.setPlatformC(_platformC);
     }
 
     function setTrashAddress(address _trashAddress) external onlyRole(MANAGER_ROLE) {
-        trashAddress = _trashAddress;
-    }
-
-    function resetFundRate(
-        uint16 _depositToPlatform,
-        uint16 _depositToStatic,
-        uint16 _depositToMarket
-    ) external onlyRole(MANAGER_ROLE) {
-        depositToPlatform = _depositToPlatform;
-        depositToStatic = _depositToStatic;
-        depositToMarket = _depositToMarket;
-    }
-
-    function resetStaticRate(
-        uint16 _staticToFrontSeventy,
-        uint16 _staticToInviation,
-        uint16 _staticToSelf
-    ) external onlyRole(MANAGER_ROLE) {
-        staticToFrontSeventy = _staticToFrontSeventy;
-        staticToInviation = _staticToInviation;
-        staticToSelf = _staticToSelf;
-    }
-
-    function resetPlatformRate(
-        uint16 _platformToC,
-        uint16 _platformToB,
-        uint16 _platformToA
-    ) external onlyRole(MANAGER_ROLE) {
-        platformToC = _platformToC;
-        platformToB = _platformToB;
-        platformToA = _platformToA;
-    }
-
-    function resetMarket(
-        uint16 _marketToDirect,
-        uint16 _marketToInter,
-        uint16 _marketToManager,
-        uint16 _marketToAllV4
-    ) external onlyRole(MANAGER_ROLE) {
-        marketToDirect = _marketToDirect;
-        marketToInter = _marketToInter;
-        marketToManager = _marketToManager;
-        marketToAllV4 = _marketToAllV4;
-    }
-
-    function resetManager(
-        uint64 _marketToV1,
-        uint64 _marketToV2,
-        uint64 _marketToV3,
-        uint64 _marketToV4
-    ) external onlyRole(MANAGER_ROLE) {
-        marketToV1 = _marketToV1;
-        marketToV2 = _marketToV2;
-        marketToV3 = _marketToV3;
-        marketToV4 = _marketToV4;
-    }
-
-    function resetWithdraw(
-        uint16 _withdrawToFrontAndBack,
-        uint16 _withdrawToSelf
-    ) external onlyRole(MANAGER_ROLE) {
-        withdrawToFrontAndBack = _withdrawToFrontAndBack;
-        withdrawToSelf = _withdrawToSelf;
+        nglStorage.setTrashAddress(_trashAddress);
     }
 
     // ================================ VIEW FUNCTION ================================
 
     function inviterId(uint256 memberId) external view returns (uint256) {
-        return _relationship[memberId];
+        return nglStorage.getRelationship(memberId);
     }
 
     function memberOf(uint256 memberId) external view returns (
@@ -450,7 +280,7 @@ contract NGL is AccessControl, ReentrancyGuard {
         uint8 _marketLevel,
         uint256 _lastDepositTime
     ) {
-        Member memory member = _members[memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         _id = member.id;
         _balance = member.balance;
         _account = member.account;
@@ -466,33 +296,30 @@ contract NGL is AccessControl, ReentrancyGuard {
     } 
 
     function marketLevelOneToMember() external view returns (uint256[] memory) {
-        return _marketLevelOneToMember.values();
+        return nglStorage.getMarketLevelOneToMember();
     }
     
     function marketLevelTwoToMember() external view returns (uint256[] memory) {
-        return _marketLevelTwoToMember.values();
+        return nglStorage.getMarketLevelTwoToMember();
     }
 
     function marketLevelThreeToMember() external view returns (uint256[] memory) {
-        return _marketLevelThreeToMember.values();
+        return nglStorage.getMarketLevelThreeToMember();
     }
 
     function marketLevelFourToMember() external view returns (uint256[] memory) {
-        return _marketLevelFourToMember.values();
+        return nglStorage.getMarketLevelFourToMember();
     }
 
     function directInvitation(uint256 memberId) external view returns (uint256[] memory) {
-        return _directInvitation[memberId].values();
-    }
-
-    function getLevel(uint8 levelId) external view returns (Level memory) {
-        return _levels[levelId];
+        return nglStorage.getDirectInvitation(memberId);
+        
     }
 
     // ======================================== INTERNAL FUNCTION ========================================
 
     function _isValidLevel(uint256 amount) internal view returns (bool) {
-        uint256 levelId = _amountToLevel[amount];
+        uint256 levelId = nglStorage.getAmountToLevel(amount);
         if (levelId == 0) return false;
         else return true;
     }
@@ -502,10 +329,10 @@ contract NGL is AccessControl, ReentrancyGuard {
         view
         returns (bool)
     {
-        Member memory inviter = _members[inviterId];
+        NGLStruct.Member memory inviter = nglStorage.getMembers(inviterId);
         return inviter.account != address(0) && 
-            inviter.id < _memberId && 
-            (inviter.account == platformC || inviter.marketLevel >= 0);
+            inviter.id < nglStorage.getMemberId() && 
+            (inviter.account == nglStorage.platformC() || inviter.marketLevel >= 0);
     }
 
     function _deposit(
@@ -522,18 +349,22 @@ contract NGL is AccessControl, ReentrancyGuard {
     }
 
     function _rewardToPlatfrom(uint256 amount) internal {
-        uint256 toPlatform = amount.mul(depositToPlatform).div(100);
-        uint256 toPlatformA = toPlatform.mul(platformToA).div(depositToPlatform * 10);
-        platformABalance += toPlatformA;
-        uint256 toPlatformB = toPlatform.mul(platformToB).div(depositToPlatform * 10);
-        platformBBalance += toPlatformB;
-        uint256 toPlatformC = toPlatform.mul(platformToC).div(depositToPlatform * 10);
-        platformCBalance += toPlatformC;
+        uint256 toPlatform = amount.mul(nglStorage.depositToPlatform()).div(100);
+        uint256 toPlatformA = toPlatform.mul(nglStorage.platformToA()).div(nglStorage.depositToPlatform() * 10);
+        nglStorage.setPlatformABalance(nglStorage.platformABalance() + toPlatformA);
+        uint256 toPlatformB = toPlatform.mul(nglStorage.platformToB()).div(nglStorage.depositToPlatform() * 10);
+        nglStorage.setPlatformBBalance(nglStorage.platformBBalance() + toPlatformB);
+        uint256 toPlatformC = toPlatform.mul(nglStorage.platformToC()).div(nglStorage.depositToPlatform() * 10);
+        nglStorage.setPlatformCBalance(nglStorage.platformCBalance() + toPlatformC);
     }
 
     function _rewardToStatic(uint256 amount, uint256 memberId, uint256 inviterId) internal {
  
         // to static
+        uint256 depositToStatic = nglStorage.depositToStatic();
+        uint256 staticToFrontSeventy = nglStorage.staticToFrontSeventy();
+        uint256 staticToSelf = nglStorage.staticToSelf();
+
         uint256 toStatic = amount.mul(depositToStatic).div(100);
         // 100% static => 70% to 70 front;
         uint256 toStaticFront = toStatic.mul(staticToFrontSeventy).div(depositToStatic);
@@ -543,18 +374,18 @@ contract NGL is AccessControl, ReentrancyGuard {
         _rewardToFrontSeventyPercent(memberId, toStaticFront, 70);
 
         // reward to self when the _isStaticToSelf be setted true
-        Member memory member = _members[memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         member.balance += toStaticSelf;
         member.backBalance += toStaticSelf;
         member.totalIncome += toStaticSelf;
-        _members[memberId] = member;
+        nglStorage.setMembers(memberId, member);
     }
 
     function _rewardToFrontSeventyPercent(uint256 memberId, uint256 toStaticFront, uint256 frontAmount) internal {
         // have member in the range of front 70
         if (memberId >= 72) {
             for (uint256 i = 2; i <= 71; i++) {
-                uint256 rewardMemberid = 72 - (i - 1);
+                uint256 rewardMemberid = memberId - (i - 1);
                 _rewardToStaticFront(toStaticFront, rewardMemberid, frontAmount);
             }
         } else {
@@ -567,12 +398,13 @@ contract NGL is AccessControl, ReentrancyGuard {
             }
 
             if (totalFundToPlatformC != 0) {
-                trashBalance += totalFundToPlatformC;
+                nglStorage.setTrashBalance(nglStorage.trashBalance() + totalFundToPlatformC);
             }
         }
     }
 
     function _rewardToBackThirtyPercent(uint256 memberId_, uint256 toStaticInvitation, uint256 backAmount) internal {
+        uint256 _memberId = nglStorage.getMemberId();
         if (memberId_ + 30 <= _memberId) {
             for (uint256 i = 1; i <= 30; i++) {
                 uint256 rewardMemberId = memberId_ + i;
@@ -591,15 +423,20 @@ contract NGL is AccessControl, ReentrancyGuard {
             }
 
             if (totalFundToPlatformC != 0) {
-                trashBalance += totalFundToPlatformC;
+                nglStorage.setTrashBalance(nglStorage.trashBalance() + totalFundToPlatformC);
             }
         }
     }
 
     function _rewardToMarket(uint256 amount, uint256 memberId) internal {
-        uint256 amount_ = amount;
+
+        uint256 depositToMarket = nglStorage.depositToMarket();
+        uint256 marketToDirect = nglStorage.marketToDirect();
+        uint256 marketToInter = nglStorage.marketToInter();
+        uint256 marketToManager = nglStorage.marketToManager();
+        uint256 marketToAllV4 = nglStorage.marketToAllV4();
         uint256 toMarket = amount.mul(depositToMarket).div(100);
-        uint256 inviterId = _relationship[memberId];
+        uint256 inviterId = nglStorage.getRelationship(memberId);
         uint256 toDirectAddress = toMarket.mul(marketToDirect).div(depositToMarket); // 20% directly invite
         uint256 toSecondLevelAddress = toMarket.mul(marketToInter).div(depositToMarket); // 10% second level invite
         uint256 toMarketLevel = toMarket.mul(marketToManager).div(depositToMarket); // 15% market level address
@@ -608,49 +445,52 @@ contract NGL is AccessControl, ReentrancyGuard {
         // to direcly invitation and second invitation
         while (high <= 2) {
             if (inviterId != 0) {
-                Member memory member = _members[inviterId];
+                NGLStruct.Member memory member = nglStorage.getMembers(inviterId);
                 uint256 rewardIncome = high == 1 ? toDirectAddress : toSecondLevelAddress;
-                if (inviterId == 1) platformCBalance += rewardIncome;
+                if (inviterId == 1) nglStorage.setPlatformCBalance(nglStorage.platformCBalance() + rewardIncome);
                 else {
                     member.balance += rewardIncome;
                     member.totalIncome += rewardIncome;
                     member.dynamicBalance += rewardIncome;
                 }
-                _members[inviterId] = member;
+                nglStorage.setMembers(inviterId, member);
             } else {
-                trashBalance += toSecondLevelAddress;
+                nglStorage.setTrashBalance(nglStorage.trashBalance() + toSecondLevelAddress);
             }
 
-            inviterId = _relationship[inviterId];
+            inviterId = nglStorage.getRelationship(inviterId);
             high++;
         }
-
+        {
+        uint256 amount_ = amount;
+        uint256 memberId_ = memberId;
         // to market level
-        uint256 mToV1 = amount_.mul(marketToV1).div(100); // 3% / 15%
-        uint256 mToV2 = amount_.mul(marketToV2).div(100); // 4% / 15%
-        uint256 mToV3 = amount_.mul(marketToV3).div(100); // 4% / 15%
-        uint256 mToV4 = amount_.mul(marketToV4).div(100); // 4% / 15%
+        uint256 mToV1 = amount_.mul(nglStorage.marketToV1()).div(100); // 3% / 15%
+        uint256 mToV2 = amount_.mul(nglStorage.marketToV2()).div(100); // 4% / 15%
+        uint256 mToV3 = amount_.mul(nglStorage.marketToV3()).div(100); // 4% / 15%
+        uint256 mToV4 = amount_.mul(nglStorage.marketToV4()).div(100); // 4% / 15%
         
-        inviterId = _relationship[memberId];
-        Member[] memory mMembers = new Member[](4);
+        uint256 inviterId_ = nglStorage.getRelationship(memberId_);
+        NGLStruct.Member[] memory mMembers = new NGLStruct.Member[](4);
         uint256 mCount = 0;
         
         // store the member of v1, v2, v3, v4
-        while (inviterId != 0) {
-            if (_members[inviterId].marketLevel > 0) {
-                if (_isExistMarketLevelMember(mMembers, _members[inviterId].marketLevel)) {
-                    inviterId = _relationship[inviterId];
+        while (inviterId_ != 0) {
+            NGLStruct.Member memory member = nglStorage.getMembers(inviterId_);
+            if (member.marketLevel > 0) {
+                if (_isExistMarketLevelMember(mMembers, member.marketLevel)) {
+                    inviterId_ = nglStorage.getRelationship(inviterId_);
                 } else {
-                    mMembers[mCount] = _members[inviterId];
+                    mMembers[mCount] = member;
                     mCount++;
                 }
             }
-            inviterId = _relationship[inviterId];
+            inviterId_ = nglStorage.getRelationship(inviterId_);
         }
         
         if (mCount != 0) {
             // pad empty index with 0
-            Member[] memory newMembers = new Member[](4);
+            NGLStruct.Member[] memory newMembers = new NGLStruct.Member[](4);
             for (uint256 i = 0; i < newMembers.length; i++) {
                 for (uint256 j = 0; j < mCount; j++) {
                     if (mMembers[j].marketLevel == i + 1) {
@@ -665,7 +505,7 @@ contract NGL is AccessControl, ReentrancyGuard {
             uint256 accumulative = 0;
 
             for (uint256 i = 0;  i < newMembers.length; i++) {
-                Member memory rewardMember = _members[newMembers[i].id];
+                NGLStruct.Member memory rewardMember = nglStorage.getMembers(newMembers[i].id);
                 if (newMembers[i].id == 0) {
                     if (i == 0) accumulative += mToV1;
                     else if (i == 1) accumulative += mToV2;
@@ -695,23 +535,24 @@ contract NGL is AccessControl, ReentrancyGuard {
                     
                     accumulative = 0;
                 }
-                _members[newMembers[i].id] = rewardMember;
+                nglStorage.setMembers(newMembers[i].id, rewardMember);
 
             }
 
-            if (accumulative != 0 ) trashBalance += accumulative;
+            if (accumulative != 0 ) nglStorage.setTrashBalance(nglStorage.trashBalance().add(accumulative));
 
         } else {
-            trashBalance += toMarketLevel;
+            nglStorage.setTrashBalance(nglStorage.trashBalance().add(toMarketLevel));
         }
 
         // to market fouth level
-        v4balance += toV4;
+        nglStorage.setV4balance(nglStorage.v4balance().add(toV4));
+        }
     }
 
-    function _isExistMarketLevelMember(Member[] memory members, uint256 marketLevel) internal returns (bool) {
+    function _isExistMarketLevelMember(NGLStruct.Member[] memory members, uint256 marketLevel) internal returns (bool) {
         for (uint256 i = 0; i < members.length; i++) {
-            Member memory itemMember = members[i];
+            NGLStruct.Member memory itemMember = members[i];
             if (itemMember.marketLevel == marketLevel) return true;
         }
 
@@ -724,22 +565,24 @@ contract NGL is AccessControl, ReentrancyGuard {
         uint256 inviterId,
         uint256 backAmount
     ) internal {
-        Member storage rewardMember = _members[rewardMemberId];
-        Level memory level = _levels[rewardMember.level];
+        NGLStruct.Member memory rewardMember = nglStorage.getMembers(rewardMemberId);
+        NGLStruct.Level memory level = nglStorage.getLevel(rewardMember.level);
         uint256 rewardFund = amount.div(backAmount);
 
         if (inviterId + level.front >= rewardMemberId) {
             rewardMember.balance += rewardFund;
             rewardMember.backBalance += rewardFund;
             rewardMember.totalIncome += rewardFund;
+
+            nglStorage.setMembers(rewardMemberId, rewardMember);
         } else {
-            trashBalance += rewardFund;
+            nglStorage.setTrashBalance(nglStorage.trashBalance() + rewardFund);
         }
     }
 
     function _rewardToStaticFront(uint256 amount, uint256 rewardMemberId, uint256 frontAmount) internal {
-        Member memory rewardMember = _members[rewardMemberId];
-        Level memory memberLevel = _levels[rewardMember.level];
+        NGLStruct.Member memory rewardMember = nglStorage.getMembers(rewardMemberId);
+        NGLStruct.Level memory memberLevel = nglStorage.getLevel(rewardMember.level);
         uint256 rewardFund = amount.div(frontAmount);
         if (memberLevel.back >= 70) {
             // the 34 member in front of current member can both reward the fund
@@ -750,55 +593,54 @@ contract NGL is AccessControl, ReentrancyGuard {
             // the rest of member who satisfy specified condition in front of current member can reward the fund
             uint256 canRewardRange = rewardMember.id + memberLevel.back;
             // judge current member whether can reward the fund
-            if (canRewardRange >= _memberId) {
+            if (canRewardRange >= nglStorage.getMemberId()) {
                 rewardMember.balance += rewardFund;
                 rewardMember.totalIncome += rewardFund;
                 rewardMember.frontBalance += rewardFund;
             } else {
                 // no qualifications, reward to platform c
-                trashBalance += rewardFund;
+                nglStorage.setTrashBalance(nglStorage.trashBalance() + rewardFund);
                 return;
             }
         }
 
-        _members[rewardMemberId] = rewardMember;
+        nglStorage.setMembers(rewardMemberId, rewardMember);
     }
 
-    function _canUpgrade(Member memory member) internal view returns (bool) {
-        uint256[] memory invitaionMembers = _directInvitation[member.id]
-            .values();
+    function _canUpgrade(NGLStruct.Member memory member) internal view returns (bool) {
+        uint256[] memory invitaionMembers = nglStorage.getDirectInvitation(member.id);
         // v0 => v1
         if (
             member.marketLevel == 0 &&
-            invitaionMembers.length >= upgradeToV1Amount &&
-            member.totalIncome >= upgradeToV1Income
+            invitaionMembers.length >= nglStorage.upgradeToV1Amount() &&
+            member.totalIncome >= nglStorage.upgradeToV1Income()
         ) return true;
         // v1 => v2
         else if (
             member.marketLevel == 1 &&
-            member.totalIncome >= upgradeToV2Income
+            member.totalIncome >= nglStorage.upgradeToV2Income()
         ) {
             uint256 count = _searchInvitationCountByMarketLevel(
                 1,
                 invitaionMembers
             );
-            return count >= upgradeToV2Amount ? true : false;
+            return count >= nglStorage.upgradeToV2Amount() ? true : false;
         }
         // v2 => v3
-        else if (member.marketLevel == 2 && member.totalIncome >= upgradeToV3Income) {
+        else if (member.marketLevel == 2 && member.totalIncome >= nglStorage.upgradeToV3Income()) {
             uint256 count = _searchInvitationCountByMarketLevel(
                 2,
                 invitaionMembers
             );
-            return count >= upgradeToV3Amount ? true : false;
+            return count >= nglStorage.upgradeToV3Amount() ? true : false;
         }
         // v3 => v4
-        else if (member.marketLevel == 3 && member.totalIncome >= upgradeToV4Income) {
+        else if (member.marketLevel == 3 && member.totalIncome >= nglStorage.upgradeToV4Income()) {
             uint256 count = _searchInvitationCountByMarketLevel(
                 3,
                 invitaionMembers
             );
-            return count >= upgradeToV4Amount ? true : false;
+            return count >= nglStorage.upgradeToV4Amount() ? true : false;
         } 
         else return false;
     }
@@ -809,7 +651,7 @@ contract NGL is AccessControl, ReentrancyGuard {
     ) internal view returns (uint256) {
         uint256 count = 0;
         for (uint256 i = 0; i < invitaionMembers.length; i++) {
-            Member memory invitaionMember = _members[invitaionMembers[i]];
+            NGLStruct.Member memory invitaionMember = nglStorage.getMembers(invitaionMembers[i]);
             if (invitaionMember.marketLevel == marketLevel) count++;
         }
 
@@ -818,37 +660,43 @@ contract NGL is AccessControl, ReentrancyGuard {
 
 
     function _canWithDraw(uint256 memberId, uint256 amount) internal view returns (bool) {
-        Member memory member = _members[memberId];
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         return member.account != address(0) &&
             member.account == _msgSender() &&
             member.balance > 0 &&
             member.balance >= amount &&
-            amount >= withdrawThreshold;
+            amount >= nglStorage.withdrawThreshold();
     }
 
     function _addMember(address account, uint8 level, uint8 marketLevel, uint256 amount) internal {
-        Member storage member = _members[_memberId];
+        uint256 _memberId = nglStorage.getMemberId();
+        NGLStruct.Member memory member = nglStorage.getMembers(_memberId);
         member.id = _memberId;
         member.account = account;
         member.level = level;
         member.lastDepositTime = block.timestamp;
         member.totalDeposit += amount;
         member.marketLevel = marketLevel;
-        memberIdOf[account] = _memberId;
+        nglStorage.setMemberIdOf(account, _memberId);
 
-        _memberId++;
+        nglStorage.setMembers(_memberId, member);
+        nglStorage.addMemberId();
     }
 
     function _upgradeLevel(uint256 memberId) internal {
-        Member storage member = _members[memberId];
-        if (member.totalDeposit >= _levels[_levelId].value){
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
+        uint8 _levelId = nglStorage.getLevelId();
+        NGLStruct.Level memory level = nglStorage.getLevel(_levelId);
+        if (member.totalDeposit >= level.value){
             member.level = _levelId;
         } else
             for (uint8 i = 1; i < _levelId; i++) {
-                if (member.totalDeposit >= _levels[i].value &&
-                    member.totalDeposit < _levels[i + 1].value) {
+                if (member.totalDeposit >= nglStorage.getLevel(i).value &&
+                    member.totalDeposit < nglStorage.getLevel(i + 1).value) {
                         member.level = i;
                     }
             }
+        
+        nglStorage.setMembers(memberId, member);
     }
 }
