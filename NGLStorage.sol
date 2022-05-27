@@ -5,6 +5,43 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./NGLStruct.sol";
 
+
+interface INGL {
+    function directInvitation(uint256 memberId) external view returns (uint256[] memory);
+    function memberOf(uint256 memberId) external view returns (
+        uint256 _frontBalance,
+        uint256 _backBalance,
+        uint256 _totalDeposit,
+        uint256 _totalWithdraw,
+        uint256 _totalIncome,
+        uint256 _dynamicBalance,
+        uint256 _id,
+        uint256 _balance,
+        address _account,
+        uint8 _level,
+        uint8 _marketLevel,
+        uint256 _lastDepositTime
+    );
+    function inviterId(uint256 memberId) external view returns (uint256);
+    function _memberId() external view returns (uint256);
+    function platformA() external view returns (address);    
+    function platformB() external view returns (address);
+    function platformC() external view returns (address);
+    function trashAddress() external view returns (address);
+    function platformABalance() external view returns (uint256);
+    function platformToA() external view returns (uint256);
+    function platformToB() external view returns (uint256);
+    function platformToC() external view returns (uint256);
+    function v4balance() external view returns (uint256);
+    function platformBBalance() external view returns (uint256);
+    function platformCBalance() external view returns (uint256);
+    function trashBalance() external view returns (uint256);
+    function marketLevelOneToMember() external view returns (uint256[] memory);
+    function marketLevelTwoToMember() external view returns (uint256[] memory);
+    function marketLevelThreeToMember() external view returns (uint256[] memory);
+    function marketLevelFourToMember() external view returns (uint256[] memory);
+}
+
 contract NGLStorage is AccessControl {
     using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
@@ -12,7 +49,6 @@ contract NGLStorage is AccessControl {
     // ======================================== CONSTANT VARIBLE ========================================
     bytes32 public constant LOGIC_CONTRACT_ROLE = keccak256("LOGIC_CONTRACT_ROLE");
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    bytes32 public constant BOT_ROLE = keccak256("BOT_ROLE");
 
     // ======================================== PUBLIC VARIBLE ========================================
     uint256 public _memberId;
@@ -266,5 +302,85 @@ contract NGLStorage is AccessControl {
         upgradeToV4Income = _upgradeToV4Income;
 
         isInitalize = true;
+    }
+
+    function backupOldContractMember(
+        address oldContract,
+        uint256 start,
+        uint256 end
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 memberLength = INGL(oldContract)._memberId();
+
+        for (uint256 i = start; i <= end; i++) {
+            address oldContract_ = oldContract;
+             (
+                uint256 _frontBalance,
+                uint256 _backBalance,
+                uint256 _totalDeposit,
+                uint256 _totalWithdraw,
+                uint256 _totalIncome,
+                uint256 _dynamicBalance,
+                uint256 _id,
+                uint256 _balance,
+                address _account,
+                uint8 _level,
+                uint8 _marketLevel,
+                uint256 _lastDepositTime
+            ) = INGL(oldContract_).memberOf(1);
+            NGLStruct.Member memory member = NGLStruct.Member(
+                _id,
+                _balance,
+                _totalIncome,
+                _frontBalance,
+                _backBalance,
+                _totalDeposit,
+                _totalWithdraw,
+                _dynamicBalance,
+                _lastDepositTime,
+                _account,
+                _level,
+                _marketLevel
+            );
+            uint256 _i = i;
+            _members[_i] = member;
+            memberIdOf[member.account] = member.id;
+            _relationship[member.id] = INGL(oldContract_).inviterId(member.id);
+            _isDeposit[member.account] = true;
+            _members[member.id] = member;
+            uint256[] memory directInviters = INGL(oldContract_).directInvitation(member.id);
+            for (uint256 j = 0; j < directInviters.length; j++) {
+                _directInvitation[member.id].add(directInviters[j]);
+
+            }
+        }
+
+        uint256[] memory oneLevelMembers = INGL(oldContract).marketLevelOneToMember();
+        for (uint256 i = 0; i < oneLevelMembers.length; i++) {
+            _marketLevelOneToMember.add(oneLevelMembers[i]);
+        }
+        uint256[] memory twoLevelMembers = INGL(oldContract).marketLevelTwoToMember();
+        for (uint256 i = 0; i < twoLevelMembers.length; i++) {
+            _marketLevelTwoToMember.add(twoLevelMembers[i]);
+        }
+        uint256[] memory threeLevelMembers = INGL(oldContract).marketLevelThreeToMember();
+        for (uint256 i = 0; i < threeLevelMembers.length; i++) {
+            _marketLevelThreeToMember.add(threeLevelMembers[i]);
+        }
+        uint256[] memory fourLevelMembers = INGL(oldContract).marketLevelFourToMember();
+        for (uint256 i = 0; i < fourLevelMembers.length; i++) {
+            _marketLevelFourToMember.add(fourLevelMembers[i]);
+        }
+        
+        _memberId = memberLength;
+
+        v4balance = INGL(oldContract).v4balance();
+        platformA = INGL(oldContract).platformA();
+        platformABalance = INGL(oldContract).platformABalance();
+        platformB = INGL(oldContract).platformB();
+        platformBBalance = INGL(oldContract).platformBBalance();
+        platformC = INGL(oldContract).platformC();
+        platformCBalance = INGL(oldContract).platformCBalance();
+        trashAddress = INGL(oldContract).trashAddress();
+        trashBalance = INGL(oldContract).trashBalance();
     }
 }
