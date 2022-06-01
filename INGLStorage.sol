@@ -47,15 +47,10 @@ interface INGLStorage {
     function memberIdOf(address account) external view returns (uint256);
     function setMemberIdOf(address account, uint256 memberId) external;
     function setV4balance(uint256 amount) external;
-    function setPlatformA(address account) external;
     function setPlatformABalance(uint256 amount) external;
-    function setPlatformB(address account) external;
     function setPlatformBBalance(uint256 amount) external;
-    function setPlatformC(address account) external;
     function setPlatformCBalance(uint256 amount) external;
-    function setTrashAddress(address account) external;
     function setTrashBalance(uint256 amount) external;
-    function setIsInitalize(bool isInitalize_) external;
     function setIsDeposit(address account, bool isDeposit_) external;
     function getIsDeposit(address account) external view returns (bool);
     function setMembers(uint256 memberId, NGLStruct.Member memory member) external;
@@ -79,14 +74,4 @@ interface INGLStorage {
     function getMarketLevelThreeToMember() external view returns (uint256[] memory);
     function setMarketLevelFourToMember(uint256 memberId) external;
     function getMarketLevelFourToMember() external view returns (uint256[] memory);
-    function setUpgradeMarketLevel(
-        uint256 _upgradeToV1Amount,
-        uint256 _upgradeToV1Income,
-        uint256 _upgradeToV2Amount,
-        uint256 _upgradeToV2Income,
-        uint256 _upgradeToV3Income,
-        uint256 _upgradeToV3Amount,
-        uint256 _upgradeToV4Income,
-        uint256 _upgradeToV4Amount
-    ) external;
 }
