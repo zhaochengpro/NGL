@@ -44,6 +44,7 @@ interface INGLStorage {
     function getMemberId() external view returns (uint256);
     function setWithdrawThreshold(uint256 withdrawThreshold_) external;
     function addMemberId() external;
+    function memberIdOf(address account) external view returns (uint256);
     function setMemberIdOf(address account, uint256 memberId) external;
     function setV4balance(uint256 amount) external;
     function setPlatformA(address account) external;
