@@ -642,4 +642,6 @@ contract NGL is AccessControl {
         
         nglStorage.setMembers(memberId, member);
     }
+
+    receive() external payable{}
 }
