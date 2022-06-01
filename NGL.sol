@@ -75,11 +75,6 @@ contract NGL is AccessControl {
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
-    // function initalize() external onlyRole(DEFAULT_ADMIN_ROLE) {
-    //     // initialize level
-    //     addLevel(30, 70, 1 * 10 ** 17);
-    //     _addMember(address(this), 1, 0, 1 * 10 ** 17);
-    // }
 
     function deposit(uint256 amount, uint256 inviterId) external payable {
         require(amount == msg.value, "Not enough value");
@@ -269,32 +264,9 @@ contract NGL is AccessControl {
     }
 
     function memberOf(uint256 memberId) external view returns (
-        uint256 _frontBalance,
-        uint256 _backBalance,
-        uint256 _totalDeposit,
-        uint256 _totalWithdraw,
-        uint256 _totalIncome,
-        uint256 _dynamicBalance,
-        uint256 _id,
-        uint256 _balance,
-        address _account,
-        uint8 _level,
-        uint8 _marketLevel,
-        uint256 _lastDepositTime
+        NGLStruct.Member memory
     ) {
-        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
-        _id = member.id;
-        _balance = member.balance;
-        _account = member.account;
-        _level = member.level;
-        _totalIncome = member.totalIncome;
-        _marketLevel = member.marketLevel;
-        _frontBalance = member.frontBalance;
-        _backBalance = member.backBalance;
-        _totalDeposit = member.totalDeposit;
-        _totalWithdraw = member.totalWithdraw;
-        _dynamicBalance = member.dynamicBalance;
-        _lastDepositTime = member.lastDepositTime;
+        return nglStorage.getMembers(memberId);
     }
 
     // ======================================== INTERNAL FUNCTION ========================================
@@ -574,19 +546,6 @@ contract NGL is AccessControl {
             rewardMember.balance += rewardFund;
             rewardMember.totalIncome += rewardFund;
             rewardMember.frontBalance += rewardFund;
-        } else {
-            // the rest of member who satisfy specified condition in front of current member can reward the fund
-            uint256 canRewardRange = rewardMember.id + memberLevel.back;
-            // judge current member whether can reward the fund
-            if (canRewardRange >= nglStorage.getMemberId()) {
-                rewardMember.balance += rewardFund;
-                rewardMember.totalIncome += rewardFund;
-                rewardMember.frontBalance += rewardFund;
-            } else {
-                // no qualifications, reward to platform c
-                nglStorage.setTrashBalance(nglStorage.trashBalance() + rewardFund);
-                return;
-            }
         }
 
         nglStorage.setMembers(rewardMemberId, rewardMember);
