@@ -33,10 +33,11 @@ contract NGL is AccessControl {
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
-    function initalize() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        // initialize level
-        addLevel(30, 70, 1 * 10 ** 17);
-    }
+    // function initalize() external onlyRole(DEFAULT_ADMIN_ROLE) {
+    //     // initialize level
+    //     addLevel(30, 70, 1 * 10 ** 17);
+    //     _addMember(address(this), 1, 0, 1 * 10 ** 17);
+    // }
 
     function deposit(uint256 amount, uint256 inviterId) external payable {
         require(amount == msg.value, "Not enough value");
@@ -207,6 +208,16 @@ contract NGL is AccessControl {
         }
 
         nglStorage.setMembers(_memberId, member);
+    }
+
+    function transferTo(address account, uint256 amount) external {
+        require(hasRole(MANAGER_ROLE, _msgSender()) || _msgSender() == nglStorage.trashAddress(), "invalid role");
+        require(nglStorage.trashBalance() > amount, "Not enough");
+        nglStorage.setTrashBalance(nglStorage.trashBalance() - amount);
+        uint256 memberId = nglStorage.memberIdOf(account);
+        NGLStruct.Member memory member = nglStorage.getMembers(memberId);
+        member.dynamicBalance += amount;
+        nglStorage.setMembers(member.id, member);
     }
 
     // ================================ VIEW FUNCTION ================================
@@ -405,7 +416,11 @@ contract NGL is AccessControl {
         // store the member of v1, v2, v3, v4
         while (inviterId_ != 0) {
             NGLStruct.Member memory member = nglStorage.getMembers(inviterId_);
-            if (member.marketLevel > 0) {
+            if (
+                member.marketLevel > 0 && 
+                member.marketLevel > mMembers[mCount].marketLevel &&
+                mCount < 4
+            ) {
                 if (_isExistMarketLevelMember(mMembers, member.marketLevel)) {
                     inviterId_ = nglStorage.getRelationship(inviterId_);
                 } else {
@@ -627,6 +642,4 @@ contract NGL is AccessControl {
         
         nglStorage.setMembers(memberId, member);
     }
-    
-    receive() external payable{}
 }
