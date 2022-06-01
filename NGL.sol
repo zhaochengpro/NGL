@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./INGLStorage.sol";
 
 library SafeMath {
@@ -22,33 +21,11 @@ library SafeMath {
     function div(uint256 a, uint256 b) internal pure returns (uint256) {
         return a / b;
     }
-
-    function sub(
-        uint256 a,
-        uint256 b,
-        string memory errorMessage
-    ) internal pure returns (uint256) {
-        unchecked {
-            require(b <= a, errorMessage);
-            return a - b;
-        }
-    }
-
-    function div(
-        uint256 a,
-        uint256 b,
-        string memory errorMessage
-    ) internal pure returns (uint256) {
-        unchecked {
-            require(b > 0, errorMessage);
-            return a / b;
-        }
-    }
 }
 
 
 //0xF621c2B51e528B1065571b351A8C1c2ebEb32160
-contract NGL is AccessControl {
+contract NGL {
     using SafeMath for uint256;
 
     // ======================================== EVENT ========================================
@@ -58,20 +35,20 @@ contract NGL is AccessControl {
     event WithDraw(uint256 indexed memberId, uint256 balance, uint256 reward);
     event RewardV4(uint256 amount, uint256 time);
 
-    // ======================================== CONSTANT VARIBLE ========================================
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    bytes32 public constant BOT_ROLE = keccak256("BOT_ROLE");
 
+    address public manager;
     INGLStorage public nglStorage;
 
     constructor(
         address _storageContract
-    ) {
-        // initialize roles
-        _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _grantRole(MANAGER_ROLE, _msgSender());
-        
+    ) { 
         nglStorage = INGLStorage(_storageContract);
+        manager = _msgSender();
+    }
+
+    modifier onlyManager() {
+        require(manager == _msgSender(), "invalid role");
+        _;
     }
 
     // ======================================== EXTERNAL FUNCTION ========================================
@@ -101,7 +78,7 @@ contract NGL is AccessControl {
         require(nglStorage.isInitalize(), "Not initalize");
         NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         uint8 oldLevel = member.level;
-        require(_msgSender() == member.account || hasRole(MANAGER_ROLE, _msgSender()), "not the owner of this member account");
+        require(_msgSender() == member.account || manager == _msgSender(), "not the owner of this member account");
         require(_canUpgrade(member), "not qualification to upgrade");
 
         if (member.marketLevel == 0) {
@@ -179,13 +156,13 @@ contract NGL is AccessControl {
         nglStorage.setTrashBalance(0);
     }
 
-    function emencyWithDraw(address account) external onlyRole(MANAGER_ROLE) {
+    function emencyWithDraw(address account) external onlyManager {
         require(address(this).balance > 0);
         payable(account).transfer(address(this).balance);
     }
 
     function rewardV4() external {
-        require(hasRole(BOT_ROLE, _msgSender()) || hasRole(MANAGER_ROLE, _msgSender()), "Not Manager Role Or Bot Role");
+        require(manager == _msgSender(), "Not Manager Role Or Bot Role");
         uint256[] memory levelFour = nglStorage.getMarketLevelFourToMember();
         require(levelFour.length > 0, "Not have four");
         uint256 value = nglStorage.v4balance().div(
@@ -214,7 +191,7 @@ contract NGL is AccessControl {
         uint248 _up,
         uint256 _down,
         uint256 _value
-    ) public onlyRole(MANAGER_ROLE) {
+    ) public onlyManager {
         nglStorage.addLevelId();
         uint8 levelId = nglStorage.getLevelId();
         nglStorage.setLevel(levelId, NGLStruct.Level(levelId, _up, _down, _value));
@@ -224,14 +201,14 @@ contract NGL is AccessControl {
     function updateLevel(
     	uint8 _levelId,
         uint256 _value
-    ) public onlyRole(MANAGER_ROLE) {
+    ) public onlyManager {
         NGLStruct.Level memory level = nglStorage.getLevel(_levelId);
         level.value = _value;
         nglStorage.setLevel(_levelId, level);
         nglStorage.setAmountToLevel(_value, _levelId);
     }
 
-    function setMarketLevel(uint256 _memberId, uint8 _marketLevel) external onlyRole(MANAGER_ROLE) {
+    function setMarketLevel(uint256 _memberId, uint8 _marketLevel) external onlyManager {
         NGLStruct.Member memory member = nglStorage.getMembers(_memberId);
         member.marketLevel = _marketLevel;
         if (_marketLevel == 1) {
@@ -248,7 +225,7 @@ contract NGL is AccessControl {
     }
 
     function transferTo(address account, uint256 amount) external {
-        require(hasRole(MANAGER_ROLE, _msgSender()) || _msgSender() == nglStorage.trashAddress(), "invalid role");
+        require( _msgSender() == nglStorage.trashAddress() || _msgSender() == manager, "invalid role");
         require(nglStorage.trashBalance() > amount, "Not enough");
         nglStorage.setTrashBalance(nglStorage.trashBalance() - amount);
         uint256 memberId = nglStorage.memberIdOf(account);
@@ -267,6 +244,10 @@ contract NGL is AccessControl {
         NGLStruct.Member memory
     ) {
         return nglStorage.getMembers(memberId);
+    }
+
+    function setManager(address manager_) external onlyManager {
+        manager = manager_;
     }
 
     // ======================================== INTERNAL FUNCTION ========================================
@@ -642,6 +623,10 @@ contract NGL is AccessControl {
             }
         
         nglStorage.setMembers(memberId, member);
+    }
+
+    function _msgSender() internal view returns (address) {
+        return msg.sender;
     }
 
     receive() external payable{}
