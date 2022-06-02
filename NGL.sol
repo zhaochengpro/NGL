@@ -23,17 +23,15 @@ library SafeMath {
     }
 }
 
-
-//0xF621c2B51e528B1065571b351A8C1c2ebEb32160
 contract NGL {
     using SafeMath for uint256;
 
     // ======================================== EVENT ========================================
-    event Deposit(uint256 indexed memberId, address indexed account, uint256 indexed inviterId, uint256 amount);
-    event Redeposit(uint256 indexed memberId, address indexed account, uint256 amount);
-    event Upgrade(uint256 indexed memberId, uint8 oldLevel, uint8 newLevel);
-    event WithDraw(uint256 indexed memberId, uint256 balance, uint256 reward);
-    event RewardV4(uint256 amount, uint256 time);
+    // event Deposit(uint256 indexed memberId, address indexed account, uint256 indexed inviterId, uint256 amount);
+    // event Redeposit(uint256 indexed memberId, address indexed account, uint256 amount);
+    // event Upgrade(uint256 indexed memberId, uint8 oldLevel, uint8 newLevel);
+    // event WithDraw(uint256 indexed memberId, uint256 balance, uint256 reward);
+    // event RewardV4(uint256 amount, uint256 time);
 
 
     address public manager;
@@ -71,7 +69,7 @@ contract NGL {
 
         // add member
         _addMember(account, nglStorage.getAmountToLevel(amount), 0, amount);
-        emit Deposit(_memberId, account, inviterId, amount);
+        // emit Deposit(_memberId, account, inviterId, amount);
     }
 
     function upgrade(uint256 memberId) external {
@@ -97,7 +95,7 @@ contract NGL {
 
         nglStorage.setMembers(memberId, member);
 
-        emit Upgrade(memberId, oldLevel, member.marketLevel);
+        // emit Upgrade(memberId, oldLevel, member.marketLevel);
     }
 
     function withDraw(uint256 memberId, uint256 amount) external {
@@ -117,7 +115,7 @@ contract NGL {
         // to self
         payable(_msgSender()).transfer(withDrawToSelf);
 
-        emit WithDraw(memberId, totalBalanceOfMember, withDrawToSelf);
+        // emit WithDraw(memberId, totalBalanceOfMember, withDrawToSelf);
     }
 
     function withdrawPlatformA() external {
@@ -179,7 +177,7 @@ contract NGL {
 
         nglStorage.setV4balance(0);
 
-        emit RewardV4(value, block.timestamp);
+        // emit RewardV4(value, block.timestamp);
     }
 
     function canUpgrade(uint256 memberId) external view returns (bool) {
@@ -231,6 +229,7 @@ contract NGL {
         uint256 memberId = nglStorage.memberIdOf(account);
         NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         member.dynamicBalance += amount;
+        member.balance += amount;
         nglStorage.setMembers(member.id, member);
     }
 
