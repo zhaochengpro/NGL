@@ -408,19 +408,15 @@ contract NGL {
         uint256 mCount = 0;
         
         // store the member of v1, v2, v3, v4
-        while (inviterId_ != 0) {
+         while (inviterId_ != 0) {
             NGLStruct.Member memory member = nglStorage.getMembers(inviterId_);
             if (
                 member.marketLevel > 0 && 
-                member.marketLevel > mMembers[mCount].marketLevel &&
+                member.marketLevel > mMembers[mCount == 0 ? 0 : mCount - 1].marketLevel &&
                 mCount < 4
             ) {
-                if (_isExistMarketLevelMember(mMembers, member.marketLevel)) {
-                    inviterId_ = nglStorage.getRelationship(inviterId_);
-                } else {
                     mMembers[mCount] = member;
                     mCount++;
-                }
             }
             inviterId_ = nglStorage.getRelationship(inviterId_);
         }
