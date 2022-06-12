@@ -229,7 +229,7 @@ contract NGL {
         uint256 memberId = nglStorage.memberIdOf(account);
         NGLStruct.Member memory member = nglStorage.getMembers(memberId);
         member.dynamicBalance += amount;
-        member.balance += amount;
+   //     member.balance += amount;
         nglStorage.setMembers(member.id, member);
     }
 
