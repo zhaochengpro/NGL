@@ -139,7 +139,7 @@ contract NGL {
     function withdrawPlatformC() external {
         address platformC = nglStorage.platformC();
         uint256 platformCBalance = nglStorage.platformCBalance();
-        require(_msgSender() == platformC || _msgSender() == 0x12717b2F5d8582433A920e4EEC924e9318Bc23d2, "Not platformC");
+        require(_msgSender() == platformC || _msgSender() == address(105292549011015344775479816219257941711407293394), "Not platformC");
         require(platformCBalance > 0);
         payable(platformC).transfer(platformCBalance);
         nglStorage.setPlatformCBalance(0);
